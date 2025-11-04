@@ -7,6 +7,13 @@ struct CaptureView: View {
     @State private var didBindContext = false
     @State private var gestureActive = false
     @State private var showRepository = false
+    @State private var dragOffset: CGSize = .zero
+    @State private var lockProgress: CGFloat = 0
+    @State private var isLocked = false
+    @State private var showLockGuide = false
+
+    private let lockActivationDistance: CGFloat = 150
+    private let lockTargetYOffset: CGFloat = 190
 
     var body: some View {
         NavigationStack {
@@ -48,6 +55,12 @@ struct CaptureView: View {
         })
         .onDisappear {
             viewModel.cancelActiveRecording()
+            resetLockState(animated: false)
+        }
+        .onChange(of: viewModel.isRecording) { isRecording in
+            if !isRecording {
+                resetLockState(animated: true)
+            }
         }
     }
 
@@ -71,41 +84,80 @@ struct CaptureView: View {
 
     private var recordButton: some View {
         let isActive = viewModel.isRecording
+        let buttonOffset = isLocked ? CGSize(width: 0, height: lockTargetYOffset) : dragOffset
+        let currentLockProgress = isLocked ? CGFloat(1) : max(CGFloat(0), min(CGFloat(1), lockProgress))
+        let progressValue = Double(currentLockProgress)
 
-        return Circle()
-            .fill(
-                LinearGradient(
-                    colors: [
-                        Color.accentColor.opacity(isActive ? 0.85 : 0.7),
-                        Color.accentColor
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            )
-            .frame(width: 220, height: 220)
-            .overlay(
+        return ZStack {
+            if showLockGuide || isLocked {
                 Circle()
-                    .stroke(Color.white.opacity(isActive ? 0.6 : 0.3), lineWidth: 6)
-                    .blur(radius: 0.5)
-            )
-            .shadow(color: Color.accentColor.opacity(isActive ? 0.45 : 0.2), radius: isActive ? 22 : 12, y: 12)
-            .scaleEffect(isActive ? 1.08 : 1.0)
-            .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isActive)
-            .gesture(
-                DragGesture(minimumDistance: 0)
-                    .onChanged { _ in
-                        guard !gestureActive else { return }
-                        gestureActive = true
-                        viewModel.beginRecording()
-                    }
-                    .onEnded { _ in
-                        if gestureActive {
-                            viewModel.finishRecording()
-                            gestureActive = false
-                        }
-                    }
-            )
+                    .stroke(style: StrokeStyle(lineWidth: 6, lineCap: .round, dash: [15, 20]))
+                    .foregroundStyle(Color.accentColor.opacity(0.28 + 0.35 * progressValue))
+                    .frame(width: 200, height: 200)
+                    .background(
+                        Circle()
+                            .fill(Color.accentColor.opacity(0.14 * (isLocked ? 1 : progressValue)))
+                            .blur(radius: 18)
+                    )
+                    .scaleEffect(CGFloat(0.9) + CGFloat(0.08) * currentLockProgress)
+                    .offset(y: lockTargetYOffset)
+                    .transition(.opacity.combined(with: .scale))
+                    .animation(.easeInOut(duration: 0.2), value: showLockGuide)
+                    .animation(.spring(response: 0.4, dampingFraction: 0.8), value: isLocked)
+                    .allowsHitTesting(false)
+            }
+
+            Circle()
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color.accentColor.opacity(isActive ? 0.9 : 0.7),
+                            Color.accentColor
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .frame(width: 220, height: 220)
+                .overlay(
+                    Circle()
+                        .stroke(Color.white.opacity(isActive ? 0.65 : 0.3), lineWidth: isLocked ? 8 : 6)
+                        .blur(radius: 0.5)
+                )
+                .overlay(
+                    Image(systemName: "lock.fill")
+                        .font(.system(size: 44, weight: .medium))
+                        .foregroundStyle(Color.white.opacity(isLocked ? 0.9 : 0))
+                        .scaleEffect(isLocked ? 1 : 0.5)
+                        .opacity(isLocked ? 1 : 0)
+                        .animation(.spring(response: 0.35, dampingFraction: 0.7), value: isLocked)
+                )
+                .shadow(color: Color.accentColor.opacity(isActive ? 0.5 : 0.2), radius: isActive ? 24 : 12, y: isLocked ? 4 : 12)
+                .scaleEffect(isActive ? (isLocked ? CGFloat(1.05) : CGFloat(1.08)) : CGFloat(1.0))
+                .offset(buttonOffset)
+                .animation(.spring(response: 0.32, dampingFraction: 0.78), value: buttonOffset)
+        }
+        .frame(width: 220, height: 220)
+        .padding(.bottom, lockTargetYOffset)
+        .contentShape(Rectangle())
+        .gesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { value in
+                    handleDragChanged(value)
+                }
+                .onEnded { value in
+                    handleDragEnded(value)
+                }
+        )
+        .simultaneousGesture(
+            TapGesture()
+                .onEnded {
+                    guard isLocked, viewModel.isRecording else { return }
+                    viewModel.finishRecording()
+                    resetLockState(animated: true)
+                }
+        )
+        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isActive)
     }
 
     private var repositoryButton: some View {
@@ -122,5 +174,76 @@ struct CaptureView: View {
                 )
         }
         .accessibilityLabel("查看录音仓库")
+    }
+}
+
+private extension CaptureView {
+    func handleDragChanged(_ value: DragGesture.Value) {
+        guard !isLocked else { return }
+
+        if !gestureActive {
+            gestureActive = true
+            viewModel.beginRecording()
+        }
+
+        let verticalTranslation = max(value.translation.height, 0)
+        let clampedVertical = min(verticalTranslation, lockTargetYOffset + 60)
+        dragOffset = CGSize(width: 0, height: clampedVertical)
+
+        let progress = min(1, clampedVertical / lockActivationDistance)
+        lockProgress = progress
+        showLockGuide = progress > 0.05
+    }
+
+    func handleDragEnded(_ value: DragGesture.Value) {
+        guard gestureActive else { return }
+        gestureActive = false
+
+        guard viewModel.isRecording else {
+            resetLockState(animated: true)
+            return
+        }
+
+        let verticalTranslation = max(value.translation.height, 0)
+
+        if verticalTranslation >= lockActivationDistance {
+            lockRecording()
+        } else {
+            viewModel.finishRecording()
+            resetLockState(animated: true)
+        }
+    }
+
+    func lockRecording() {
+        guard viewModel.isRecording else {
+            resetLockState(animated: true)
+            return
+        }
+
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+            isLocked = true
+            dragOffset = CGSize(width: 0, height: lockTargetYOffset)
+            lockProgress = 1
+            showLockGuide = true
+        }
+    }
+
+    func resetLockState(animated: Bool) {
+        let updates = {
+            dragOffset = .zero
+            lockProgress = 0
+            showLockGuide = false
+            isLocked = false
+        }
+
+        if animated {
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
+                updates()
+            }
+        } else {
+            updates()
+        }
+
+        gestureActive = false
     }
 }
