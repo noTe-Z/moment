@@ -90,6 +90,13 @@ struct CaptureView: View {
         let buttonRadius: CGFloat = 110 // 按钮半径（也是中心点到边缘的距离）
 
         return GeometryReader { geometry in
+            let baseCenterY = geometry.size.height / 2 - lockTargetYOffset / 2
+
+            let circleCenter = CGPoint(
+                x: geometry.size.width / 2 + buttonOffset.width,
+                y: baseCenterY + buttonOffset.height
+            )
+
             ZStack {
                 if showLockGuide || isLocked {
                     Circle()
@@ -104,7 +111,7 @@ struct CaptureView: View {
                         .scaleEffect(CGFloat(0.9) + CGFloat(0.08) * currentLockProgress)
                         .position(
                             x: geometry.size.width / 2,
-                            y: geometry.size.height / 2 + lockTargetYOffset
+                            y: baseCenterY + lockTargetYOffset
                         )
                         .transition(.opacity.combined(with: .scale))
                         .animation(.easeInOut(duration: 0.2), value: showLockGuide)
@@ -140,47 +147,51 @@ struct CaptureView: View {
                     .shadow(color: Color.accentColor.opacity(isActive ? 0.5 : 0.2), radius: isActive ? 24 : 12, y: isLocked ? 4 : 12)
                     .scaleEffect(isActive ? (isLocked ? CGFloat(1.05) : CGFloat(1.08)) : CGFloat(1.0))
                     .position(
-                        x: geometry.size.width / 2 + buttonOffset.width,
-                        y: geometry.size.height / 2 + buttonOffset.height
+                        x: circleCenter.x,
+                        y: circleCenter.y
                     )
                     .animation(.spring(response: 0.32, dampingFraction: 0.78), value: buttonOffset)
-                    .contentShape(Circle())
-                    .gesture(
-                        DragGesture(minimumDistance: 0)
-                            .onChanged { value in
-                                // 手势坐标是相对于 Circle 的 frame (220x220)
-                                // Circle 的中心点是 (110, 110)
-                                let startLocation = value.startLocation
-                                let distanceFromCenter = sqrt(
-                                    pow(startLocation.x - buttonRadius, 2) +
-                                    pow(startLocation.y - buttonRadius, 2)
-                                )
-                                
-                                // 只有触摸点在按钮半径范围内才处理手势
-                                guard distanceFromCenter <= buttonRadius else { return }
-                                
-                                handleDragChanged(value)
-                            }
-                            .onEnded { value in
-                                // 只有之前手势是激活状态才处理结束
-                                guard gestureActive else { return }
-                                
-                                handleDragEnded(value)
-                            }
-                    )
-                    .simultaneousGesture(
-                        TapGesture()
-                            .onEnded {
-                                // 锁定状态下，点击按钮区域才能结束录音
-                                guard isLocked, viewModel.isRecording else { return }
-                                viewModel.finishRecording()
-                                resetLockState(animated: true)
-                            }
-                    )
             }
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { value in
+                        guard !isLocked else { return }
+
+                        let startPoint = value.startLocation
+                        let distanceFromCenter = hypot(
+                            startPoint.x - circleCenter.x,
+                            startPoint.y - circleCenter.y
+                        )
+
+                        guard distanceFromCenter <= buttonRadius else { return }
+
+                        handleDragChanged(value)
+                    }
+                    .onEnded { value in
+                        if isLocked {
+                            let endPoint = value.location
+                            let distanceFromCenter = hypot(
+                                endPoint.x - circleCenter.x,
+                                endPoint.y - circleCenter.y
+                            )
+
+                            guard distanceFromCenter <= buttonRadius else { return }
+                            guard viewModel.isRecording else { return }
+
+                            viewModel.finishRecording()
+                            resetLockState(animated: true)
+                            return
+                        }
+
+                        guard gestureActive else { return }
+
+                        handleDragEnded(value)
+                    }
+            )
         }
-        .frame(width: 220, height: 220)
-        .padding(.bottom, lockTargetYOffset)
+        .frame(width: 220, height: 220 + lockTargetYOffset)
+        .padding(.bottom, 24)
         .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isActive)
     }
 
