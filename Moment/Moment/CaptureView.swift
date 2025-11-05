@@ -87,76 +87,100 @@ struct CaptureView: View {
         let buttonOffset = isLocked ? CGSize(width: 0, height: lockTargetYOffset) : dragOffset
         let currentLockProgress = isLocked ? CGFloat(1) : max(CGFloat(0), min(CGFloat(1), lockProgress))
         let progressValue = Double(currentLockProgress)
+        let buttonRadius: CGFloat = 110 // 按钮半径（也是中心点到边缘的距离）
 
-        return ZStack {
-            if showLockGuide || isLocked {
-                Circle()
-                    .stroke(style: StrokeStyle(lineWidth: 6, lineCap: .round, dash: [15, 20]))
-                    .foregroundStyle(Color.accentColor.opacity(0.28 + 0.35 * progressValue))
-                    .frame(width: 200, height: 200)
-                    .background(
-                        Circle()
-                            .fill(Color.accentColor.opacity(0.14 * (isLocked ? 1 : progressValue)))
-                            .blur(radius: 18)
-                    )
-                    .scaleEffect(CGFloat(0.9) + CGFloat(0.08) * currentLockProgress)
-                    .offset(y: lockTargetYOffset)
-                    .transition(.opacity.combined(with: .scale))
-                    .animation(.easeInOut(duration: 0.2), value: showLockGuide)
-                    .animation(.spring(response: 0.4, dampingFraction: 0.8), value: isLocked)
-                    .allowsHitTesting(false)
-            }
-
-            Circle()
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            Color.accentColor.opacity(isActive ? 0.9 : 0.7),
-                            Color.accentColor
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .frame(width: 220, height: 220)
-                .overlay(
+        return GeometryReader { geometry in
+            ZStack {
+                if showLockGuide || isLocked {
                     Circle()
-                        .stroke(Color.white.opacity(isActive ? 0.65 : 0.3), lineWidth: isLocked ? 8 : 6)
-                        .blur(radius: 0.5)
-                )
-                .overlay(
-                    Image(systemName: "lock.fill")
-                        .font(.system(size: 44, weight: .medium))
-                        .foregroundStyle(Color.white.opacity(isLocked ? 0.9 : 0))
-                        .scaleEffect(isLocked ? 1 : 0.5)
-                        .opacity(isLocked ? 1 : 0)
-                        .animation(.spring(response: 0.35, dampingFraction: 0.7), value: isLocked)
-                )
-                .shadow(color: Color.accentColor.opacity(isActive ? 0.5 : 0.2), radius: isActive ? 24 : 12, y: isLocked ? 4 : 12)
-                .scaleEffect(isActive ? (isLocked ? CGFloat(1.05) : CGFloat(1.08)) : CGFloat(1.0))
-                .offset(buttonOffset)
-                .animation(.spring(response: 0.32, dampingFraction: 0.78), value: buttonOffset)
+                        .stroke(style: StrokeStyle(lineWidth: 6, lineCap: .round, dash: [15, 20]))
+                        .foregroundStyle(Color.accentColor.opacity(0.28 + 0.35 * progressValue))
+                        .frame(width: 200, height: 200)
+                        .background(
+                            Circle()
+                                .fill(Color.accentColor.opacity(0.14 * (isLocked ? 1 : progressValue)))
+                                .blur(radius: 18)
+                        )
+                        .scaleEffect(CGFloat(0.9) + CGFloat(0.08) * currentLockProgress)
+                        .position(
+                            x: geometry.size.width / 2,
+                            y: geometry.size.height / 2 + lockTargetYOffset
+                        )
+                        .transition(.opacity.combined(with: .scale))
+                        .animation(.easeInOut(duration: 0.2), value: showLockGuide)
+                        .animation(.spring(response: 0.4, dampingFraction: 0.8), value: isLocked)
+                        .allowsHitTesting(false)
+                }
+
+                Circle()
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color.accentColor.opacity(isActive ? 0.9 : 0.7),
+                                Color.accentColor
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(width: 220, height: 220)
+                    .overlay(
+                        Circle()
+                            .stroke(Color.white.opacity(isActive ? 0.65 : 0.3), lineWidth: isLocked ? 8 : 6)
+                            .blur(radius: 0.5)
+                    )
+                    .overlay(
+                        Image(systemName: "lock.fill")
+                            .font(.system(size: 44, weight: .medium))
+                            .foregroundStyle(Color.white.opacity(isLocked ? 0.9 : 0))
+                            .scaleEffect(isLocked ? 1 : 0.5)
+                            .opacity(isLocked ? 1 : 0)
+                            .animation(.spring(response: 0.35, dampingFraction: 0.7), value: isLocked)
+                    )
+                    .shadow(color: Color.accentColor.opacity(isActive ? 0.5 : 0.2), radius: isActive ? 24 : 12, y: isLocked ? 4 : 12)
+                    .scaleEffect(isActive ? (isLocked ? CGFloat(1.05) : CGFloat(1.08)) : CGFloat(1.0))
+                    .position(
+                        x: geometry.size.width / 2 + buttonOffset.width,
+                        y: geometry.size.height / 2 + buttonOffset.height
+                    )
+                    .animation(.spring(response: 0.32, dampingFraction: 0.78), value: buttonOffset)
+                    .contentShape(Circle())
+                    .gesture(
+                        DragGesture(minimumDistance: 0)
+                            .onChanged { value in
+                                // 手势坐标是相对于 Circle 的 frame (220x220)
+                                // Circle 的中心点是 (110, 110)
+                                let startLocation = value.startLocation
+                                let distanceFromCenter = sqrt(
+                                    pow(startLocation.x - buttonRadius, 2) +
+                                    pow(startLocation.y - buttonRadius, 2)
+                                )
+                                
+                                // 只有触摸点在按钮半径范围内才处理手势
+                                guard distanceFromCenter <= buttonRadius else { return }
+                                
+                                handleDragChanged(value)
+                            }
+                            .onEnded { value in
+                                // 只有之前手势是激活状态才处理结束
+                                guard gestureActive else { return }
+                                
+                                handleDragEnded(value)
+                            }
+                    )
+                    .simultaneousGesture(
+                        TapGesture()
+                            .onEnded {
+                                // 锁定状态下，点击按钮区域才能结束录音
+                                guard isLocked, viewModel.isRecording else { return }
+                                viewModel.finishRecording()
+                                resetLockState(animated: true)
+                            }
+                    )
+            }
         }
         .frame(width: 220, height: 220)
         .padding(.bottom, lockTargetYOffset)
-        .contentShape(Rectangle())
-        .gesture(
-            DragGesture(minimumDistance: 0)
-                .onChanged { value in
-                    handleDragChanged(value)
-                }
-                .onEnded { value in
-                    handleDragEnded(value)
-                }
-        )
-        .simultaneousGesture(
-            TapGesture()
-                .onEnded {
-                    guard isLocked, viewModel.isRecording else { return }
-                    viewModel.finishRecording()
-                    resetLockState(animated: true)
-                }
-        )
         .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isActive)
     }
 
