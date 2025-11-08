@@ -7,6 +7,6 @@ struct MomentApp: App {
         WindowGroup {
             CaptureView()
         }
-        .modelContainer(for: Recording.self)
+        .modelContainer(for: [Recording.self, TextNote.self])
     }
 }
