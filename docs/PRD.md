@@ -105,9 +105,9 @@
 为了实现上述功能，你需要在本地数据库中（建议使用 SwiftData 或 Core Data）创建以下数据模型：
 
 **Recording (录音对象)**
- * id: UUID (唯一标识符)
- * timestamp: Date (录音的精确日期和时间，用于排序和分组)
- * duration: TimeInterval (录音时长，例如 35.2 秒，用于显示)
+   * id: UUID (唯一标识符)
+   * timestamp: Date (录音的精确日期和时间，用于排序和分组)
+   * duration: TimeInterval (录音时长，例如 35.2 秒，用于显示)
  * fileName: String (指向设备上保存的音频文件名)
 
 **TextNote (结构化文本笔记对象)** - 新增

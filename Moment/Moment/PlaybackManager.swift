@@ -20,11 +20,13 @@ final class PlaybackManager: NSObject, ObservableObject {
         player?.stop()
         player = nil
         currentlyPlayingID = nil
-        do {
-            try AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
-        } catch {
-            // Non-fatal
-        }
+        // 不要停用音频会话，因为可能有录音正在进行
+        // 只有在确定没有其他音频活动时才停用
+        // do {
+        //     try AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
+        // } catch {
+        //     // Non-fatal
+        // }
     }
 
     private func startPlayback(for recording: Recording) {
@@ -35,8 +37,19 @@ final class PlaybackManager: NSObject, ObservableObject {
 
         do {
             let session = AVAudioSession.sharedInstance()
-            try session.setCategory(.playback, mode: .spokenAudio, options: [.mixWithOthers])
-            try session.setActive(true, options: [])
+            
+            // 只在必要时配置音频会话，避免中断正在进行的录音
+            // 检查当前类别是否已经是 .playAndRecord
+            if session.category != .playAndRecord {
+                // 使用最温和的配置，确保不会中断录音
+                try session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .mixWithOthers, .allowBluetooth])
+            }
+            
+            // 不要主动激活会话，让 AVAudioPlayer 自己处理
+            // 这样可以避免中断正在进行的录音
+            // if !session.isOtherAudioPlaying {
+            //     try session.setActive(true, options: [.notifyOthersOnDeactivation])
+            // }
 
             let newPlayer = try AVAudioPlayer(contentsOf: recording.fileURL)
             newPlayer.delegate = self

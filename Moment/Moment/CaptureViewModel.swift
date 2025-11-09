@@ -22,6 +22,20 @@ final class CaptureViewModel: ObservableObject {
     private var fileURL: URL?
     private var timer: Timer?
 
+    init() {
+        // 监听音频会话中断
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleAudioInterruption),
+            name: AVAudioSession.interruptionNotification,
+            object: AVAudioSession.sharedInstance()
+        )
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+
     func bind(context: ModelContext) {
         self.context = context
     }
@@ -44,7 +58,12 @@ final class CaptureViewModel: ObservableObject {
 
         do {
             let session = AVAudioSession.sharedInstance()
-            try session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetooth])
+            // 使用强制配置，确保录音不会被其他操作中断
+            try session.setCategory(
+                .playAndRecord,
+                mode: .default,
+                options: [.defaultToSpeaker, .allowBluetooth, .mixWithOthers, .duckOthers]
+            )
             try session.setActive(true, options: [])
 
             let now = Date()
@@ -66,8 +85,53 @@ final class CaptureViewModel: ObservableObject {
             status = .timer("00:00")
             startTimer()
             Haptic.trigger(.light)
+            
+            print("✅ 录音已开始")
         } catch {
             status = .message("录音失败")
+            print("❌ 录音启动失败：\(error)")
+        }
+    }
+    
+    @objc private func handleAudioInterruption(notification: Notification) {
+        guard let userInfo = notification.userInfo,
+              let typeValue = userInfo[AVAudioSessionInterruptionTypeKey] as? UInt,
+              let type = AVAudioSession.InterruptionType(rawValue: typeValue) else {
+            return
+        }
+        
+        Task { @MainActor in
+            switch type {
+            case .began:
+                // 中断开始：不做任何处理，让录音继续
+                // 使用 .mixWithOthers 选项应该允许录音继续进行
+                print("⚠️ 音频会话中断开始，但录音应该继续")
+            case .ended:
+                // 中断结束：确保音频会话仍然活跃
+                guard let optionsValue = userInfo[AVAudioSessionInterruptionOptionKey] as? UInt else { return }
+                let options = AVAudioSession.InterruptionOptions(rawValue: optionsValue)
+                
+                if options.contains(.shouldResume) || isRecording {
+                    do {
+                        // 确保音频会话处于正确的配置
+                        let session = AVAudioSession.sharedInstance()
+                        try session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetooth, .mixWithOthers])
+                        try session.setActive(true, options: [])
+                        
+                        // 如果录音器存在且正在录音，确保它仍在录音
+                        if let recorder = audioRecorder, isRecording {
+                            if !recorder.isRecording {
+                                recorder.record()
+                                print("✅ 录音已恢复")
+                            }
+                        }
+                    } catch {
+                        print("❌ 无法恢复音频会话：\(error)")
+                    }
+                }
+            @unknown default:
+                break
+            }
         }
     }
 
@@ -159,6 +223,22 @@ final class CaptureViewModel: ObservableObject {
             guard let self, self.isRecording, let startDate = self.startDate else { return }
             let elapsed = Date().timeIntervalSince(startDate)
             self.status = .timer(TimeFormatter.display(for: elapsed))
+            
+            // 检查录音器是否真的在录音，如果没有就尝试恢复
+            if let recorder = self.audioRecorder, !recorder.isRecording {
+                print("⚠️ 检测到录音被暂停，尝试恢复...")
+                do {
+                    // 重新激活音频会话
+                    let session = AVAudioSession.sharedInstance()
+                    try session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetooth, .mixWithOthers])
+                    try session.setActive(true, options: [])
+                    // 恢复录音
+                    recorder.record()
+                    print("✅ 录音已自动恢复")
+                } catch {
+                    print("❌ 无法恢复录音：\(error)")
+                }
+            }
         }
         RunLoop.main.add(timer!, forMode: .common)
     }

@@ -53,10 +53,6 @@ struct CaptureView: View {
         }, message: {
             Text("请前往系统设置开启麦克风权限，以便记录你的想法。")
         })
-        .onDisappear {
-            viewModel.cancelActiveRecording()
-            resetLockState(animated: false)
-        }
         .onChange(of: viewModel.isRecording) { isRecording in
             if !isRecording {
                 resetLockState(animated: true)
