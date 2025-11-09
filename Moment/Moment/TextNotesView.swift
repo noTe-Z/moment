@@ -12,7 +12,10 @@ struct TextNotesView: View {
             } else {
                 ForEach(textNotes) { note in
                     NavigationLink {
-                        TextEditorView(existingNote: note)
+                        TextEditorView(
+                            recording: associatedRecording(for: note),
+                            existingNote: note
+                        )
                     } label: {
                         TextNoteRow(note: note)
                     }
@@ -44,6 +47,12 @@ struct TextNotesView: View {
             modelContext.delete(note)
         }
         try? modelContext.save()
+    }
+    
+    private func associatedRecording(for note: TextNote) -> Recording? {
+        guard let recordingID = note.recordingID else { return nil }
+        let descriptor = FetchDescriptor<Recording>(predicate: #Predicate { $0.id == recordingID })
+        return try? modelContext.fetch(descriptor).first
     }
 }
 

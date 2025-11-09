@@ -7,15 +7,14 @@ struct RepositoryView: View {
     
     var body: some View {
         VStack(spacing: 0) {
-            // Tab 内容区域
-            TabView(selection: $selectedTab) {
-                RecordingsListView()
-                    .tag(0)
-                
-                TextNotesView()
-                    .tag(1)
+            // Tab 内容区域 - 使用条件渲染替代 TabView，避免滑动冲突
+            Group {
+                if selectedTab == 0 {
+                    RecordingsListView()
+                } else {
+                    TextNotesView()
+                }
             }
-            .tabViewStyle(.page(indexDisplayMode: .never))
             
             // 自定义底部 Tab Bar
             Divider()
