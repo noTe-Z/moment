@@ -66,6 +66,7 @@ final class PlaybackManager: NSObject, ObservableObject {
     }
 }
 
+@MainActor
 extension PlaybackManager: AVAudioPlayerDelegate {
     func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
         Task { @MainActor in
