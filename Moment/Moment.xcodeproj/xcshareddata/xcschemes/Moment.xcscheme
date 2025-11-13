@@ -50,6 +50,13 @@
             ReferencedContainer = "container:Moment.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
+      <EnvironmentVariables>
+         <EnvironmentVariable
+            key = "ASSEMBLYAI_API_KEY"
+            value = "51e4b51b244442a6add92fbda6d675cb"
+            isEnabled = "YES">
+         </EnvironmentVariable>
+      </EnvironmentVariables>
    </LaunchAction>
    <ProfileAction
       buildConfiguration = "Release"

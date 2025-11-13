@@ -128,7 +128,8 @@ private extension AssemblyAITranscriptionService {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         
         let payload: [String: Any] = [
-            "audio_url": audioURL
+            "audio_url": audioURL,
+            "language_detection": true
         ]
         
         do {
