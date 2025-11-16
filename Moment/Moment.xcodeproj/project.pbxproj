@@ -21,6 +21,7 @@
 		1F4C8CCD2A8C4D25008B1234 /* TextNotesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F4C8CCE2A8C4D25008B1234 /* TextNotesView.swift */; };
 		B10D03C82C0E4B8200E4A4BD /* TextEditorRecorderViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10D03C72C0E4B8200E4A4BD /* TextEditorRecorderViewModel.swift */; };
 		B10D03CA2C0E4BA100E4A4BD /* AssemblyAITranscriptionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10D03C92C0E4BA100E4A4BD /* AssemblyAITranscriptionService.swift */; };
+		B1A3F7FF2E33A54F00E5E2E3 /* OpenAIRewriteService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1A3F7FE2E33A54F00E5E2E3 /* OpenAIRewriteService.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -40,6 +41,7 @@
 		1F4C8CCE2A8C4D25008B1234 /* TextNotesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextNotesView.swift; sourceTree = "<group>"; };
 		B10D03C72C0E4B8200E4A4BD /* TextEditorRecorderViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextEditorRecorderViewModel.swift; sourceTree = "<group>"; };
 		B10D03C92C0E4BA100E4A4BD /* AssemblyAITranscriptionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AssemblyAITranscriptionService.swift; sourceTree = "<group>"; };
+		B1A3F7FE2E33A54F00E5E2E3 /* OpenAIRewriteService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenAIRewriteService.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -85,6 +87,7 @@
 				1F4C8CC32A8C4D25008B1234 /* Formatters.swift */,
 				B10D03C72C0E4B8200E4A4BD /* TextEditorRecorderViewModel.swift */,
 				B10D03C92C0E4BA100E4A4BD /* AssemblyAITranscriptionService.swift */,
+				B1A3F7FE2E33A54F00E5E2E3 /* OpenAIRewriteService.swift */,
 				1F4C8CA32A8C4D25008B1234 /* Resources */,
 				1F4C8CC52A8C4D25008B1234 /* Info.plist */,
 			);
@@ -180,6 +183,7 @@
 				1F4C8CCD2A8C4D25008B1234 /* TextNotesView.swift in Sources */,
 				B10D03CA2C0E4BA100E4A4BD /* AssemblyAITranscriptionService.swift in Sources */,
 				B10D03C82C0E4B8200E4A4BD /* TextEditorRecorderViewModel.swift in Sources */,
+				B1A3F7FF2E33A54F00E5E2E3 /* OpenAIRewriteService.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -53,7 +53,12 @@
       <EnvironmentVariables>
          <EnvironmentVariable
             key = "ASSEMBLYAI_API_KEY"
-            value = "51e4b51b244442a6add92fbda6d675cb"
+            value = ""
+            isEnabled = "YES">
+         </EnvironmentVariable>
+         <EnvironmentVariable
+            key = "OPENAI_API_KEY"
+            value = ""
             isEnabled = "YES">
          </EnvironmentVariable>
       </EnvironmentVariables>

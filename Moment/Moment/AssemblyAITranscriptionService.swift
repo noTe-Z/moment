@@ -1,6 +1,8 @@
 import Foundation
 
 struct AssemblyAITranscriptionService {
+    private let configuration = Configuration()
+    
     enum Stage {
         case uploading
         case transcribing
@@ -127,10 +129,25 @@ private extension AssemblyAITranscriptionService {
         request.setValue(apiKey, forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         
-        let payload: [String: Any] = [
+        var payload: [String: Any] = [
             "audio_url": audioURL,
-            "language_detection": true
+            "format_text": true,
+            "punctuate": configuration.enablePunctuation,
+            "language_detection": configuration.shouldDetectLanguage
         ]
+        
+        if let languageCode = configuration.languageCode {
+            payload["language_code"] = languageCode
+        }
+        
+        if let speechModel = configuration.speechModel {
+            payload["model"] = speechModel
+        }
+        
+        if !configuration.wordBoost.isEmpty {
+            payload["word_boost"] = configuration.wordBoost
+            payload["boost_param"] = configuration.wordBoostStrength
+        }
         
         do {
             request.httpBody = try JSONSerialization.data(withJSONObject: payload)
@@ -229,6 +246,61 @@ private extension AssemblyAITranscriptionService {
         await MainActor.run {
             handler(stage)
         }
+    }
+}
+
+private extension AssemblyAITranscriptionService {
+    struct Configuration {
+        let languageCode: String?
+        let speechModel: String?
+        let enablePunctuation: Bool
+        let wordBoost: [String]
+        let wordBoostStrength: String
+        
+        init(environment: [String: String] = ProcessInfo.processInfo.environment) {
+            languageCode = environment["ASSEMBLYAI_LANGUAGE_CODE"].flatMap { $0.trimmedNonEmpty }
+            speechModel = environment["ASSEMBLYAI_SPEECH_MODEL"].flatMap { $0.trimmedNonEmpty }
+            
+            if let punctuationRaw = environment["ASSEMBLYAI_PUNCTUATE"], !punctuationRaw.isEmpty {
+                enablePunctuation = Bool(fromEnvironment: punctuationRaw)
+            } else {
+                enablePunctuation = true
+            }
+            
+            if let boostRaw = environment["ASSEMBLYAI_WORD_BOOST"], !boostRaw.isEmpty {
+                wordBoost = boostRaw
+                    .split(separator: ",")
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { !$0.isEmpty }
+            } else {
+                wordBoost = []
+            }
+            
+            if let boostStrengthRaw = environment["ASSEMBLYAI_WORD_BOOST_STRENGTH"]?.lowercased(),
+               ["low", "medium", "high"].contains(boostStrengthRaw) {
+                wordBoostStrength = boostStrengthRaw
+            } else {
+                wordBoostStrength = "high"
+            }
+        }
+        
+        var shouldDetectLanguage: Bool {
+            languageCode == nil
+        }
+    }
+}
+
+private extension String {
+    var trimmedNonEmpty: String? {
+        let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+}
+
+private extension Bool {
+    init(fromEnvironment rawValue: String) {
+        let normalized = rawValue.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        self = ["1", "true", "yes", "y", "on"].contains(normalized)
     }
 }
 

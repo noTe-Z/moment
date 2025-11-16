@@ -15,6 +15,12 @@ struct TextEditorView: View {
     @State private var associatedRecording: Recording?
     @State private var showRecordingPanel = false
     @State private var showPlaybackError = false
+    @State private var isRewriting = false
+    @State private var showRewritePreview = false
+    @State private var pendingRewrite: String?
+    @State private var rewriteSourceSnapshot: String = ""
+    @State private var rewriteErrorMessage: String?
+    @State private var showRewriteError = false
     
     @StateObject private var playbackManager = PlaybackManager()
     @StateObject private var recorderViewModel = TextEditorRecorderViewModel()
@@ -24,6 +30,7 @@ struct TextEditorView: View {
     
     // 用于跟踪是否是新创建的笔记
     private let isNewNote: Bool
+    private let rewriteService = OpenAIRewriteService()
     
     init(recording: Recording? = nil, existingNote: TextNote? = nil) {
         self.recording = recording
@@ -85,6 +92,31 @@ struct TextEditorView: View {
         }, message: {
             Text(recorderErrorMessage ?? "请稍后再试。")
         })
+        .alert("生成段落失败", isPresented: $showRewriteError, actions: {
+            Button("好的", role: .cancel) {
+                rewriteErrorMessage = nil
+            }
+        }, message: {
+            Text(rewriteErrorMessage ?? "请稍后再试。")
+        })
+        .sheet(isPresented: $showRewritePreview, onDismiss: {
+            pendingRewrite = nil
+            rewriteSourceSnapshot = ""
+        }) {
+            if let pendingRewrite {
+                RewritePreviewSheet(
+                    original: rewriteSourceSnapshot,
+                    suggestion: pendingRewrite,
+                    confirmAction: { applyRewrite(with: pendingRewrite) },
+                    cancelAction: { dismissRewritePreview() }
+                )
+                .presentationDetents([.medium, .large])
+            } else {
+                ProgressView()
+                    .progressViewStyle(.circular)
+                    .padding()
+            }
+        }
     }
     
     private var mainContent: some View {
@@ -125,6 +157,7 @@ struct TextEditorView: View {
         
         ToolbarItemGroup(placement: .bottomBar) {
             recorderToolbarButton
+            rewriteToolbarButton
             Spacer()
             associatedRecordingToolbarButton
         }
@@ -148,6 +181,45 @@ struct TextEditorView: View {
             statusText: recorderViewModel.statusMessage,
             action: handleRecorderButtonTapped
         )
+    }
+    
+    private var rewriteToolbarButton: some View {
+        let isDisabled = isRewriting || content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        
+        return Button {
+            handleRewriteButtonTapped()
+        } label: {
+            HStack(alignment: .center, spacing: 12) {
+                if isRewriting {
+                    ProgressView()
+                        .progressViewStyle(.circular)
+                        .tint(Color.accentColor)
+                } else {
+                    Image(systemName: "wand.and.stars")
+                        .font(.system(size: 22, weight: .semibold))
+                }
+                
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("整理段落")
+                        .font(.headline)
+                        .fontWeight(.semibold)
+                    Text("AI 辅助")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 18)
+            .padding(.vertical, 12)
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(isDisabled ? Color(UIColor.secondarySystemBackground) : Color.accentColor.opacity(0.15))
+            )
+            .foregroundStyle(isDisabled ? Color.secondary : Color.primary)
+        }
+        .buttonStyle(.plain)
+        .disabled(isDisabled)
+        .accessibilityLabel("使用 AI 整理当前内容")
     }
     
     @ViewBuilder
@@ -251,6 +323,60 @@ struct TextEditorView: View {
                 break
             }
         }
+    }
+    
+    private func handleRewriteButtonTapped() {
+        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            rewriteErrorMessage = "笔记内容为空，无法整理。"
+            showRewriteError = true
+            return
+        }
+        
+        if isRewriting {
+            return
+        }
+        
+        isRewriting = true
+        rewriteSourceSnapshot = content
+        let requestText = trimmed
+        
+        Task {
+            do {
+                let result = try await rewriteService.rewrite(text: requestText)
+                await MainActor.run {
+                    pendingRewrite = result
+                    showRewritePreview = true
+                }
+            } catch let error as OpenAIRewriteService.RewriteError {
+                await MainActor.run {
+                    rewriteErrorMessage = error.errorDescription ?? error.localizedDescription
+                    showRewriteError = true
+                }
+            } catch {
+                await MainActor.run {
+                    rewriteErrorMessage = error.localizedDescription
+                    showRewriteError = true
+                }
+            }
+            
+            await MainActor.run {
+                isRewriting = false
+            }
+        }
+    }
+    
+    private func applyRewrite(with suggestion: String) {
+        content = suggestion
+        pendingRewrite = nil
+        showRewritePreview = false
+        rewriteSourceSnapshot = ""
+    }
+    
+    private func dismissRewritePreview() {
+        pendingRewrite = nil
+        showRewritePreview = false
+        rewriteSourceSnapshot = ""
     }
     
     private func appendTranscript(_ text: String) {
@@ -432,6 +558,70 @@ private struct RecorderControlButton: View {
     
     private var foregroundStyle: some ShapeStyle {
         isRecording ? Color.white : (isProcessing ? Color.accentColor : Color.primary)
+    }
+}
+
+private struct RewritePreviewSheet: View {
+    let original: String
+    let suggestion: String
+    let confirmAction: () -> Void
+    let cancelAction: () -> Void
+    
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("AI 整理后的段落")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                        Text(suggestion)
+                            .font(.body)
+                            .foregroundStyle(.primary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .padding(16)
+                    .background(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .fill(Color(UIColor.systemBackground))
+                            .shadow(color: Color.black.opacity(0.06), radius: 10, x: 0, y: 4)
+                    )
+                    
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("原始内容")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                        Text(original.isEmpty ? "（空）" : original)
+                            .font(.body)
+                            .foregroundStyle(.primary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .padding(16)
+                    .background(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .fill(Color(UIColor.secondarySystemBackground))
+                    )
+                }
+                .padding(.vertical, 24)
+            }
+            .padding(.horizontal, 20)
+            .navigationTitle("AI 整理预览")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("取消") {
+                        cancelAction()
+                    }
+                }
+                
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("替换") {
+                        confirmAction()
+                    }
+                    .fontWeight(.semibold)
+                }
+            }
+        }
     }
 }
 
