@@ -160,15 +160,30 @@ private extension OpenAIRewriteService {
 extension OpenAIRewriteService {
     /// 读取 API key，优先从环境变量读取，如果没有则从 Info.plist (Build Settings) 读取
     static func readAPIKey(for key: String) -> String {
-        // 优先从环境变量读取（用于 Xcode Scheme 配置）
-        if let envValue = ProcessInfo.processInfo.environment[key], !envValue.isEmpty {
-            return envValue
+        if let sanitizedEnv = sanitizedValue(ProcessInfo.processInfo.environment[key]) {
+            return sanitizedEnv
         }
-        // 从 Info.plist 读取（Build Settings 中的值会通过 Info.plist 传递）
-        if let bundleValue = Bundle.main.object(forInfoDictionaryKey: key) as? String, !bundleValue.isEmpty {
-            return bundleValue
+        if let rawBundleValue = Bundle.main.object(forInfoDictionaryKey: key) as? String,
+           let sanitizedBundle = sanitizedValue(rawBundleValue) {
+            return sanitizedBundle
         }
         return ""
+    }
+    
+    private static func sanitizedValue(_ rawValue: String?) -> String? {
+        guard let rawValue else { return nil }
+        var trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        trimmed = trimmed.trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
+        guard !trimmed.isEmpty else { return nil }
+        
+        let lowercase = trimmed.lowercased()
+        let isPlaceholder =
+            trimmed.contains("$(") ||
+            trimmed.contains("__PLACEHOLDER__") ||
+            trimmed.contains("<#") ||
+            lowercase.contains("your_")
+        
+        return isPlaceholder ? nil : trimmed
     }
 }
 

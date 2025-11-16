@@ -82,3 +82,7 @@ docs/app_images/
 *.jpg
 *.jpeg
 
+# Local secrets configuration
+Moment/Moment/Config/Secrets.local.xcconfig
+**/*.local.xcconfig
+
