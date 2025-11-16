@@ -36,17 +36,24 @@ final class TextEditorRecorderViewModel: ObservableObject {
             case .transcriptionFailed(let message):
                 return "转写失败：\(message)"
             case .missingAPIKey:
-                return "未找到 AssemblyAI API Key，请在 Xcode Scheme 中设置 ASSEMBLYAI_API_KEY。"
+                return "未找到 AssemblyAI API Key，请在 Xcode Build Settings 或 Scheme 中设置 ASSEMBLYAI_API_KEY。"
             case .unknown(let message):
                 return "出现未知错误：\(message)"
             }
         }
+    }
+
+    struct RecordingSnapshot: Equatable {
+        let timestamp: Date
+        let duration: TimeInterval
+        let fileName: String
     }
     
     @Published private(set) var mode: Mode = .idle
     @Published private(set) var statusMessage: String?
     @Published private(set) var elapsedDisplay: String = "00:00"
     @Published var presentableError: RecorderError?
+    @Published private(set) var pendingFallbackRecording: RecordingSnapshot?
     
     private let recordingStore = RecordingStore()
     private let transcriptionService = AssemblyAITranscriptionService()
@@ -102,21 +109,29 @@ final class TextEditorRecorderViewModel: ObservableObject {
             throw error
         }
         
-        audioRecorder?.stop()
-        audioRecorder = nil
-        stopTimer()
-        mode = .uploading
-        statusMessage = "上传中…"
-        
         guard let fileURL else {
             resetState()
             let error = RecorderError.recordingInitializationFailed("录音文件缺失。")
             presentableError = error
             throw error
         }
-        
+        let startDate = recordingStartDate ?? Date()
+        let recordedDuration = audioRecorder?.currentTime ?? Date().timeIntervalSince(startDate)
+
+        audioRecorder?.stop()
+        audioRecorder = nil
+        stopTimer()
+        mode = .uploading
+        statusMessage = "上传中…"
+
+        let snapshot = RecordingSnapshot(
+            timestamp: startDate,
+            duration: recordedDuration,
+            fileName: recordingStore.fileName(from: fileURL)
+        )
+
         defer { resetSession() }
-        
+
         do {
             let transcript = try await transcriptionService.transcribeAudioFile(at: fileURL) { [weak self] stage in
                 guard let self else { return }
@@ -133,10 +148,11 @@ final class TextEditorRecorderViewModel: ObservableObject {
             }
             
             cleanupRecordingFile()
+            pendingFallbackRecording = nil
             resetState()
             return transcript
         } catch let serviceError as AssemblyAITranscriptionService.TranscriptionError {
-            cleanupRecordingFile()
+            pendingFallbackRecording = snapshot
             mode = .failed
             let recorderError: RecorderError
             switch serviceError {
@@ -151,12 +167,18 @@ final class TextEditorRecorderViewModel: ObservableObject {
                 recorderError = .unknown(message)
             }
             statusMessage = "转写失败"
+            elapsedDisplay = "00:00"
+            recordingStartDate = nil
+            self.fileURL = nil
             presentableError = recorderError
             throw recorderError
         } catch {
-            cleanupRecordingFile()
+            pendingFallbackRecording = snapshot
             mode = .failed
             statusMessage = "转写失败"
+            elapsedDisplay = "00:00"
+            recordingStartDate = nil
+            self.fileURL = nil
             let recorderError = RecorderError.unknown(error.localizedDescription)
             presentableError = recorderError
             throw recorderError
@@ -232,6 +254,10 @@ final class TextEditorRecorderViewModel: ObservableObject {
         @unknown default:
             return false
         }
+    }
+
+    func markFallbackRecordingHandled() {
+        pendingFallbackRecording = nil
     }
 }
 

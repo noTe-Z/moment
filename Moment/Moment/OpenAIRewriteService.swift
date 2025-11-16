@@ -12,7 +12,7 @@ struct OpenAIRewriteService {
         var errorDescription: String? {
             switch self {
             case .missingAPIKey:
-                return "未找到 OpenAI API Key，请在 Xcode Scheme 中设置 OPENAI_API_KEY。"
+                return "未找到 OpenAI API Key，请在 Xcode Build Settings 或 Scheme 中设置 OPENAI_API_KEY。"
             case .requestFailed(let message):
                 return "请求失败：\(message)"
             case .invalidResponse(let message):
@@ -29,7 +29,7 @@ struct OpenAIRewriteService {
     }
     
     func rewrite(text: String) async throws -> String {
-        let apiKey = ProcessInfo.processInfo.environment["OPENAI_API_KEY"] ?? ""
+        let apiKey = Self.readAPIKey(for: "OPENAI_API_KEY")
         guard !apiKey.isEmpty else {
             throw RewriteError.missingAPIKey
         }
@@ -42,8 +42,30 @@ struct OpenAIRewriteService {
         let payload = ChatCompletionRequest(
             model: Constants.model,
             messages: [
-                .init(role: "system", content: "你是一位中文写作助手，擅长将零散笔记整理成流畅、有逻辑、易于理解的段落。请保持内容忠实于原始含义，并突出重点。"),
-                .init(role: "user", content: "请将以下文本整理成一段结构清晰、语义连贯的中文段落，保留核心信息并避免无关赘述：\n\n\(text)")
+                .init(
+                    role: "system",
+                    content: """
+You are a bilingual living-note curator who iteratively polishes a document without losing information.
+
+Your responsibilities:
+1. Treat everything between <note> tags as the canonical source. Preserve every idea and section unless the writer explicitly marks it for deletion (e.g., "DELETE:" or "[x]").
+2. Detect the document shape. If it is a single storyline, return one refined paragraph. If it contains multiple themes or labeled sections, output a "Main Summary" first and then the sections (reuse the existing names/order when possible, or create clearer ones such as "Highlights", "Decisions", "Open Questions", "Limitations", "Next Actions", "Side Notes").
+3. Within each section, rewrite every bullet/paragraph for clarity while keeping intent. Integrate any new sentences into the most relevant section(s); you may merge duplicates, but never drop prior points.
+4. Maintain the original language mix, add no new data, and output only the rewritten note.
+5. If the first non-empty line is a Markdown heading such as "# 核心主线" or "# Main Thread", treat that section as the canonical storyline: keep the heading title as-is, polish the text gently, and ensure it stays before any other section.
+6. Reuse existing Markdown headings (including bullets like "Limitations", "Open Questions", etc.) as anchors. Only introduce new headings when new ideas cannot live inside existing ones, and clearly label any new sections.
+"""
+                ),
+                .init(
+                    role: "user",
+                    content: """
+Process the note below by following the curation rules: map the existing structure, decide whether it should be a single paragraph or a structured layout, then integrate every idea into that structure (keep "# 核心主线" at the very top if it exists). Always reply in the same language as the note.
+
+<note>
+\(text)
+</note>
+"""
+                )
             ],
             temperature: configuration.temperature
         )
@@ -132,6 +154,21 @@ private extension OpenAIRewriteService {
                 temperature = nil
             }
         }
+    }
+}
+
+extension OpenAIRewriteService {
+    /// 读取 API key，优先从环境变量读取，如果没有则从 Info.plist (Build Settings) 读取
+    static func readAPIKey(for key: String) -> String {
+        // 优先从环境变量读取（用于 Xcode Scheme 配置）
+        if let envValue = ProcessInfo.processInfo.environment[key], !envValue.isEmpty {
+            return envValue
+        }
+        // 从 Info.plist 读取（Build Settings 中的值会通过 Info.plist 传递）
+        if let bundleValue = Bundle.main.object(forInfoDictionaryKey: key) as? String, !bundleValue.isEmpty {
+            return bundleValue
+        }
+        return ""
     }
 }
 

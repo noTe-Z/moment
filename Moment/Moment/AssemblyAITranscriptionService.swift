@@ -38,7 +38,7 @@ struct AssemblyAITranscriptionService {
     typealias StageHandler = @MainActor (Stage) -> Void
     
     func transcribeAudioFile(at localURL: URL, stageHandler: StageHandler? = nil) async throws -> String {
-        let apiKey = ProcessInfo.processInfo.environment["ASSEMBLYAI_API_KEY"] ?? ""
+        let apiKey = Self.readAPIKey(for: "ASSEMBLYAI_API_KEY")
         guard !apiKey.isEmpty else {
             throw TranscriptionError.missingAPIKey
         }
@@ -301,6 +301,21 @@ private extension Bool {
     init(fromEnvironment rawValue: String) {
         let normalized = rawValue.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         self = ["1", "true", "yes", "y", "on"].contains(normalized)
+    }
+}
+
+extension AssemblyAITranscriptionService {
+    /// 读取 API key，优先从环境变量读取，如果没有则从 Info.plist (Build Settings) 读取
+    static func readAPIKey(for key: String) -> String {
+        // 优先从环境变量读取（用于 Xcode Scheme 配置）
+        if let envValue = ProcessInfo.processInfo.environment[key], !envValue.isEmpty {
+            return envValue
+        }
+        // 从 Info.plist 读取（Build Settings 中的值会通过 Info.plist 传递）
+        if let bundleValue = Bundle.main.object(forInfoDictionaryKey: key) as? String, !bundleValue.isEmpty {
+            return bundleValue
+        }
+        return ""
     }
 }
 
