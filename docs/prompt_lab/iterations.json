@@ -1,0 +1,71 @@
+[
+  {
+    "id": "v1-baseline",
+    "date": "2024-05-09",
+    "prompt_notes": [
+      "Original production-style prompt without explicit Main Summary instruction.",
+      "No explicit rule for bullet density or emotional preservation."
+    ],
+    "scores": {
+      "structure_detection": 2.4,
+      "canon_fidelity": 3.2,
+      "actionability": 2.0,
+      "language_integrity": 4.0,
+      "skim_efficiency_seconds": 18
+    },
+    "transcript_findings": [
+      {
+        "transcript_id": "T2",
+        "severity": "high",
+        "notes": "Collapsed CTA/Layout branches into one blob; no Main Summary."
+      },
+      {
+        "transcript_id": "T3",
+        "severity": "medium",
+        "notes": "Emotion acknowledged but ritual + slider ideas merged into a single bullet."
+      },
+      {
+        "transcript_id": "T5",
+        "severity": "high",
+        "notes": "Failed to capture motif list; paraphrase bullets missing."
+      }
+    ],
+    "accepted_hypothesis": "If we force explicit shape detection and require Main Summary + per-branch sections, the branching transcripts will stabilize.",
+    "next_iteration_slot": ""
+  },
+  {
+    "id": "v2-shape-aware",
+    "date": "2024-05-12",
+    "prompt_notes": [
+      "Added mandatory Main Summary whenever multiple storylines exist.",
+      "Section craft rule now enforces bullets for actionable ideas and preserves emotional context.",
+      "Language fidelity reminder moved near output rules to avoid hallucinated translations."
+    ],
+    "scores": {
+      "structure_detection": 4.4,
+      "canon_fidelity": 4.5,
+      "actionability": 4.2,
+      "language_integrity": 4.6,
+      "skim_efficiency_seconds": 11
+    },
+    "transcript_findings": [
+      {
+        "transcript_id": "T2",
+        "severity": "low",
+        "notes": "Sections aligned (CTA, Layout, Multi-clip) but layout copy slightly repetitive."
+      },
+      {
+        "transcript_id": "T3",
+        "severity": "low",
+        "notes": "Emotional tone retained; slider call-to-action highlighted correctly."
+      },
+      {
+        "transcript_id": "T5",
+        "severity": "medium",
+        "notes": "Layering + motif modules appear, yet emoji tagging could use an explicit bullet."
+      }
+    ],
+    "accepted_hypothesis": "Highlighting UI-specific cues (sidebars, emoji tags) keeps design intent visible without bloating context.",
+    "next_iteration_slot": ""
+  }
+]

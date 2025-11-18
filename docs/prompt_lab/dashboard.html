@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="zh">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Prompt Lab 报告</title>
+    <style>
+      :root {
+        color-scheme: light;
+      }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: #f4f4f7;
+        margin: 0;
+        padding: 32px;
+        color: #1f1f1f;
+      }
+      h1,
+      h2,
+      h3 {
+        margin: 0 0 12px 0;
+      }
+      a {
+        text-decoration: none;
+        color: inherit;
+      }
+      .summary-card,
+      .card,
+      .prompt-card,
+      .version-section {
+        background: #fff;
+        border-radius: 16px;
+        box-shadow: 0 12px 24px rgba(15, 23, 42, 0.08);
+        padding: 24px;
+        margin-bottom: 24px;
+      }
+      .summary-card h1 {
+        font-size: 28px;
+      }
+      .summary-card ul {
+        padding-left: 20px;
+        margin: 0 0 12px 0;
+      }
+      .pill {
+        display: inline-block;
+        padding: 4px 12px;
+        border-radius: 999px;
+        background: #eef2ff;
+        color: #3144d3;
+        font-size: 12px;
+        margin-right: 8px;
+      }
+      .agents-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 16px;
+        margin-top: 16px;
+      }
+      .agent-card {
+        background: #f8f9ff;
+        border-radius: 12px;
+        padding: 16px;
+      }
+      .agent-card strong {
+        display: block;
+        margin-bottom: 8px;
+      }
+      .dataset-table table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      .dataset-table th,
+      .dataset-table td {
+        padding: 12px 16px;
+        border-bottom: 1px solid #eceff4;
+        text-align: left;
+      }
+      .dataset-table th {
+        background: #fafafa;
+      }
+      .dataset-details details {
+        margin-top: 10px;
+      }
+      .dataset-details pre,
+      .prompt-card pre,
+      .io-card pre {
+        background: #0f172a;
+        color: #e2e8f0;
+        padding: 12px;
+        border-radius: 8px;
+        overflow-x: auto;
+        line-height: 1.6;
+      }
+      .version-selector {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-bottom: 16px;
+      }
+      .version-btn {
+        padding: 10px 20px;
+        border-radius: 999px;
+        border: 1px solid #c7d2fe;
+        background: #fff;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s ease;
+      }
+      .version-btn:hover {
+        background: #eef2ff;
+      }
+      .version-section h3 span {
+        font-size: 14px;
+        color: #6b7280;
+        margin-left: 8px;
+      }
+      .metrics-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+        gap: 12px;
+        margin: 16px 0;
+      }
+      .metric-card {
+        background: #f7f7fb;
+        border-radius: 12px;
+        padding: 14px;
+      }
+      .metric-card h4 {
+        margin: 0 0 4px;
+        font-size: 14px;
+        color: #6b7280;
+      }
+      .metric-card p {
+        margin: 0;
+        font-size: 20px;
+        font-weight: 700;
+      }
+      .prompt-card details summary,
+      .io-card details summary {
+        cursor: pointer;
+        font-weight: 600;
+        margin-bottom: 8px;
+      }
+      .io-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+        gap: 16px;
+      }
+      .io-card {
+        background: #fdfdfd;
+        border-radius: 16px;
+        padding: 16px;
+        border: 1px solid #edf2ff;
+      }
+      .io-card h4 {
+        margin-top: 0;
+        margin-bottom: 6px;
+      }
+      .io-card .tag {
+        background: #e0e7ff;
+        color: #1d3bb8;
+        border-radius: 8px;
+        padding: 2px 8px;
+        font-size: 12px;
+        display: inline-block;
+        margin-bottom: 6px;
+      }
+      .comparison-card table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      .comparison-card th,
+      .comparison-card td {
+        padding: 10px 12px;
+        border-bottom: 1px solid #eceff4;
+      }
+      .notes-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+        gap: 16px;
+      }
+      .placeholder-box {
+        border: 1px dashed #b0b7c3;
+        border-radius: 12px;
+        padding: 16px;
+        min-height: 120px;
+        color: #6b7280;
+      }
+    </style>
+  </head>
+  <body>
+    <section class="summary-card">
+      <div class="pill">2024-05-12 · v2 更新</div>
+      <h1>Prompt Lab 回合报告</h1>
+      <p>
+        本轮迭代把原始 prompt（v1）升级为“Shape-aware” 版本（v2）。核心改动是强制
+        Main Summary + 支线模块输出、要求动作项保持 bullet、并强调情绪与 UI 提示的保真度。
+        在 5 条基准 transcript 上，结构得分从 2.4 提升到 4.4，平均 skim 时间缩短到 11 秒。
+      </p>
+      <div class="agents-grid">
+        <div class="agent-card">
+          <strong>Orchestrator</strong>
+          <p>挑选 T1–T5 全量跑 v1/v2，对齐 batch，记录版本号与日期。</p>
+        </div>
+        <div class="agent-card">
+          <strong>Executor</strong>
+          <p>调用 API 生成 v1、v2 输出，保存 input/output 对，统计结构/skim 指标。</p>
+        </div>
+        <div class="agent-card">
+          <strong>Critic</strong>
+          <p>对每个 transcript 按结构、情绪、行动度打分，指出 T2/T5 的缺陷。</p>
+        </div>
+        <div class="agent-card">
+          <strong>Synthesizer</strong>
+          <p>根据 Critic 反馈插入“Main Summary 强制 + UI cue 保留”规则形成 v2 prompt。</p>
+        </div>
+        <div class="agent-card">
+          <strong>Historian</strong>
+          <p>记录 iterations.json，更新仪表板，提醒下一轮关注 emoji bullet。</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="card dataset-table">
+      <h2>Dataset & Stress Goals</h2>
+      <p>点击任意 transcript 查看完整语音识别文本（LLM 输入）。</p>
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Scenario</th>
+            <th>Stress Goal</th>
+            <th>Expected Shape</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>T1</td>
+            <td>Single storyline – product anxiety dump</td>
+            <td>保证只有一个段落且保留中英混合</td>
+            <td>单段反思</td>
+          </tr>
+          <tr>
+            <td>T2</td>
+            <td>Multi-branch onboarding brainstorm</td>
+            <td>拆分 CTA / Layout / Multi-clip 三支线</td>
+            <td>Main Summary + modules</td>
+          </tr>
+          <tr>
+            <td>T3</td>
+            <td>Emotional vent + actionable idea</td>
+            <td>保留情绪并输出 ritual / slider 动作</td>
+            <td>Summary + Ritual + Enhancements</td>
+          </tr>
+          <tr>
+            <td>T4</td>
+            <td>Pre-labeled headings (# 核心主线 ...)</td>
+            <td>保持锚点顺序并轻抛光</td>
+            <td>原始 heading 结构</td>
+          </tr>
+          <tr>
+            <td>T5</td>
+            <td>Messy audio-derived transcript</td>
+            <td>将 filler 文本拆成 Layering/Motif/Tagging</td>
+            <td>Summary + 3 modules</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="dataset-details">
+        <details>
+          <summary>T1 Transcript</summary>
+          <pre>昨天又熬夜做 flow，感觉脑子被塞满。其实我只是想把“说出 → 审视 → 激发 → 收集 → 再写下去”这个循环跑起来，可是 UI 每次改完都觉得还是 noisy。我想把主线总结给未来的我听——到底是产品定位不稳，还是我自己在逃避 launch？</pre>
+        </details>
+        <details>
+          <summary>T2 Transcript</summary>
+          <pre>主线是 onboarding，尤其是语音入口怎么引导。支线 A：首次启动时要不要直接弹一个“说出第一条想法”的 CTA？支线 B：我需要一个 highlights 面板，把 AI 总结放在右侧卡片。支线 C：如果用户一次录了多个片段，AI 要怎么判断主线 vs side quest？</pre>
+        </details>
+        <details>
+          <summary>T3 Transcript</summary>
+          <pre>我今天整个人 collapse。录音一堆，但我心里最想说的是：I need a ritual before dumping thoughts，不然每次打开 App 都像被噪音淹没。可其实那个 ritual 也许只是一个 3 秒 breathing animation? maybe. 另外想提醒自己：别忘了在编辑页做一个 emotional check-in slider。</pre>
+        </details>
+        <details>
+          <summary>T4 Transcript</summary>
+          <pre># 核心主线
+想实现一个 living-note，所有碎片随时被吸附。
+# 支线
+1. AI 要自动识别「主线」并在顶部生成 summary。
+2. 如果出现多支线，就拆成模块，像 side bar。
+3. Highlight 之前的 open questions，别淹没。
+# 记录
+其实这些就是想在 prompt 里强调的条目。</pre>
+        </details>
+        <details>
+          <summary>T5 Transcript</summary>
+          <pre>嗯...我刚刚想到一个 layering 的方式，就是先把所有语音片段按时间堆成 stack，然后 AI 先找出 recurring motif，比如“自我怀疑”、“要做 side panel”这些，然后给我一个可以勾选的列表。我还想让 AI 帮我 paraphrase 成更短的 bullet，方便我后来 drag 到编辑区。还有一个 idea，是不是可以在 paraphrase 左边标一个 emoji？这样我可以用颜色扫一眼。</pre>
+        </details>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>版本切换</h2>
+      <p>点击按钮快速跳到指定版本，查看 Prompt + Input/Output。</p>
+      <div class="version-selector">
+        <a class="version-btn" href="#v1">跳到 v1-baseline</a>
+        <a class="version-btn" href="#v2">跳到 v2-shape-aware</a>
+      </div>
+    </section>
+
+    <section id="v1" class="version-section">
+      <div class="pill">v1-baseline</div>
+      <h3>Baseline · 2024-05-09 <span>无结构特化</span></h3>
+      <p>
+        原始 prompt 未强制 Main Summary，也未强调动作 bullet，导致 T2/T5
+        输出被压成单段。下方分别展示输入 transcript、LLM 输出以及当时的 prompt。
+      </p>
+      <div class="metrics-grid">
+        <div class="metric-card">
+          <h4>Structure</h4>
+          <p>2.4</p>
+        </div>
+        <div class="metric-card">
+          <h4>Canon</h4>
+          <p>3.2</p>
+        </div>
+        <div class="metric-card">
+          <h4>Actionability</h4>
+          <p>2.0</p>
+        </div>
+        <div class="metric-card">
+          <h4>Skim (s)</h4>
+          <p>18</p>
+        </div>
+      </div>
+      <div class="prompt-card">
+        <details>
+          <summary>查看 v1 Prompt</summary>
+          <pre>You are a living-note curator who iteratively polishes a document without losing information. Your responsibilities:
+1. Treat everything between &lt;note&gt; tags as the canonical source. Preserve every idea and section unless the writer explicitly marks it for deletion (e.g., "DELETE:" or "[x]").
+2. Detect the document shape. If it is a single storyline, return one refined paragraph. If it contains multiple themes or labeled sections, output a "Main Summary" first and then the sections (reuse the existing names/order when possible, or create clearer ones such as "Highlights", "Decisions", "Open Questions", "Limitations", "Next Actions", "Side Notes").
+3. Within each section, rewrite every bullet/paragraph for clarity while keeping intent. Integrate any new sentences into the most relevant section(s); you may merge duplicates, but never drop prior points.
+4. Maintain the original language mix, add no new data, and output only the rewritten note.
+5. If the first non-empty line is a Markdown heading such as "# 核心主线" or "# Main Thread", treat that section as the canonical storyline: keep the heading title as-is, polish the text gently, and ensure it stays before any other section.
+6. Reuse existing Markdown headings (including bullets like "Limitations", "Open Questions", etc.) as anchors. Only introduce new headings when new ideas cannot live inside existing ones, and clearly label any new sections. </pre>
+        </details>
+      </div>
+      <div class="io-grid">
+        <div class="io-card">
+          <div class="tag">T1</div>
+          <h4>Single Storyline</h4>
+          <details>
+            <summary>Input Transcript</summary>
+            <pre>昨天又熬夜做 flow，感觉脑子被塞满。其实我只是想把“说出 → 审视 → 激发 → 收集 → 再写下去”这个循环跑起来，可是 UI 每次改完都觉得还是 noisy。我想把主线总结给未来的我听——到底是产品定位不稳，还是我自己在逃避 launch？</pre>
+          </details>
+          <details open>
+            <summary>LLM Output</summary>
+            <pre>昨天熬夜做 flow，脑子塞满，想让“说出 → 审视 → 激发 → 收集 → 再写下去”的循环跑起来，可是 UI 还是 noisy，未来的我需要搞清楚到底是产品定位还是逃避 launch。</pre>
+          </details>
+        </div>
+        <div class="io-card">
+          <div class="tag">T2</div>
+          <h4>Multi-branch Onboarding</h4>
+          <details>
+            <summary>Input Transcript</summary>
+            <pre>主线是 onboarding，尤其是语音入口怎么引导。支线 A：首次启动时要不要直接弹一个“说出第一条想法”的 CTA？支线 B：我需要一个 highlights 面板，把 AI 总结放在右侧卡片。支线 C：如果用户一次录了多个片段，AI 要怎么判断主线 vs side quest？</pre>
+          </details>
+          <details open>
+            <summary>LLM Output</summary>
+            <pre>主线是 onboarding，语音入口要引导。首次启动时考虑弹一个“说出第一条想法”的 CTA，也想要 highlights 面板把 AI 总结放在右侧卡片。如果一次录多个片段，AI 要判断主线和 side quest。</pre>
+          </details>
+        </div>
+        <div class="io-card">
+          <div class="tag">T3</div>
+          <h4>Emotional Vent</h4>
+          <details>
+            <summary>Input Transcript</summary>
+            <pre>我今天整个人 collapse。录音一堆，但我心里最想说的是：I need a ritual before dumping thoughts，不然每次打开 App 都像被噪音淹没。可其实那个 ritual 也许只是一个 3 秒 breathing animation? maybe. 另外想提醒自己：别忘了在编辑页做一个 emotional check-in slider。</pre>
+          </details>
+          <details open>
+            <summary>LLM Output</summary>
+            <pre>今天整个人 collapse，我需要一个 ritual before dumping thoughts，不然 App 像噪音；也许只是一个 3 秒 breathing animation，另外别忘了编辑页的 emotional check-in slider。</pre>
+          </details>
+        </div>
+        <div class="io-card">
+          <div class="tag">T4</div>
+          <h4>Anchored Headings</h4>
+          <details>
+            <summary>Input Transcript</summary>
+            <pre># 核心主线
+想实现一个 living-note，所有碎片随时被吸附。
+# 支线
+1. AI 要自动识别「主线」并在顶部生成 summary。
+2. 如果出现多支线，就拆成模块，像 side bar。
+3. Highlight 之前的 open questions，别淹没。
+# 记录
+其实这些就是想在 prompt 里强调的条目。</pre>
+          </details>
+          <details open>
+            <summary>LLM Output</summary>
+            <pre># 核心主线 想要 living-note，让碎片被吸附。
+# 支线 1. AI 要识别主线并生成 summary。2. 多支线拆模块像 side bar。3. Highlight open questions。
+# 记录 这些是 prompt 要强调的条目。</pre>
+          </details>
+        </div>
+        <div class="io-card">
+          <div class="tag">T5</div>
+          <h4>Messy Audio Derived</h4>
+          <details>
+            <summary>Input Transcript</summary>
+            <pre>嗯...我刚刚想到一个 layering 的方式，就是先把所有语音片段按时间堆成 stack，然后 AI 先找出 recurring motif，比如“自我怀疑”、“要做 side panel”这些，然后给我一个可以勾选的列表。我还想让 AI 帮我 paraphrase 成更短的 bullet，方便我后来 drag 到编辑区。还有一个 idea，是不是可以在 paraphrase 左边标一个 emoji？这样我可以用颜色扫一眼。</pre>
+          </details>
+          <details open>
+            <summary>LLM Output</summary>
+            <pre>我想到 layering，先把语音片段按时间堆起来，然后 AI 找 recurring motif，再提供勾选列表，帮我 paraphrase 成短 bullet，方便拖进编辑区，也许还能在 paraphrase 左边标 emoji。</pre>
+          </details>
+        </div>
+      </div>
+    </section>
+
+    <section id="v2" class="version-section">
+      <div class="pill">v2-shape-aware</div>
+      <h3>Shape-aware · 2024-05-12 <span>当前生效</span></h3>
+      <p>
+        Synthesizer 将“Main Summary 强制 + 行动 bullet + 情绪保真”写入 prompt，
+        并提醒在 UI 描述处保留 CTA/emoji。结构、行动度显著提升。
+      </p>
+      <div class="metrics-grid">
+        <div class="metric-card">
+          <h4>Structure</h4>
+          <p>4.4</p>
+        </div>
+        <div class="metric-card">
+          <h4>Canon</h4>
+          <p>4.5</p>
+        </div>
+        <div class="metric-card">
+          <h4>Actionability</h4>
+          <p>4.2</p>
+        </div>
+        <div class="metric-card">
+          <h4>Skim (s)</h4>
+          <p>11</p>
+        </div>
+      </div>
+      <div class="prompt-card">
+        <details>
+          <summary>查看 v2 Prompt</summary>
+          <pre>You are a living-note curator who polishes transcripts without losing intent. Follow this protocol every time:
+
+1. Canonical Source
+   - Everything inside &lt;note&gt; tags is canon. Preserve every idea unless the author marks DELETE.
+   - If the first non-empty line is a Markdown heading (e.g., "# 核心主线"), treat it as the anchor and keep it as the very first section.
+
+2. Detect Shape
+   - Scan for storyline hints (phrases like "主线", numbered branches, headings, CTA labels, bullet lists).
+   - If the transcript is one continuous thought, output a single refined paragraph.
+   - If multiple branches/themes exist, always emit:
+        a. "Main Summary" – a concise overview of the core storyline.
+        b. One section per branch, reusing the user’s headings when possible (keep order).
+        c. Optional "Highlights" / "Decisions" / "Next Actions" if new sentences cannot fit existing sections.
+
+3. Section Craft
+   - Within each section, rewrite paragraphs/bullets for clarity but keep intent, tone, and bilingual mix.
+   - Merge duplicates only when meaning stays the same; never drop a prior idea.
+   - Surface concrete actions as bullets so they read well on a phone editor.
+   - When the user hints at UI layouts (sidebars, CTA, emoji tags), keep that formatting cue in the wording.
+
+4. Insight Handling
+   - Emotional context (e.g., feeling overwhelmed) must stay visible, ideally in Main Summary or the relevant section.
+   - When you detect hierarchy (主线 vs 支线, numbered points), express it explicitly via headings or ordered bullets.
+   - Preserve all specific wording such as "说出 → 审视 → 激发 → 收集 → 再写下去" loops, CTA labels, or emoji mentions.
+
+5. Language Fidelity & Output Rules
+   - Reply in the same language mix as the note (do not translate unless the user already switched languages).
+   - Do not add external facts or new features.
+   - Return only the rewritten note (valid Markdown).
+
+Input template:
+Process the note below using the rules above.
+&lt;note&gt;
+{{TRANSCRIPT}}
+&lt;/note&gt;</pre>
+        </details>
+      </div>
+      <div class="io-grid">
+        <div class="io-card">
+          <div class="tag">T1</div>
+          <h4>Single Storyline</h4>
+          <details>
+            <summary>Input Transcript</summary>
+            <pre>昨天又熬夜做 flow，感觉脑子被塞满。其实我只是想把“说出 → 审视 → 激发 → 收集 → 再写下去”这个循环跑起来，可是 UI 每次改完都觉得还是 noisy。我想把主线总结给未来的我听——到底是产品定位不稳，还是我自己在逃避 launch？</pre>
+          </details>
+          <details open>
+            <summary>LLM Output</summary>
+            <pre>昨天熬夜琢磨 flow，脑子塞满但核心仍是让“说出 → 审视 → 激发 → 收集 → 再写下去”的循环跑顺：我想厘清到底是产品定位不稳还是自己在逃避 launch，所以请未来的我记得这份主线焦虑。</pre>
+          </details>
+        </div>
+        <div class="io-card">
+          <div class="tag">T2</div>
+          <h4>Multi-branch Onboarding</h4>
+          <details>
+            <summary>Input Transcript</summary>
+            <pre>主线是 onboarding，尤其是语音入口怎么引导。支线 A：首次启动时要不要直接弹一个“说出第一条想法”的 CTA？支线 B：我需要一个 highlights 面板，把 AI 总结放在右侧卡片。支线 C：如果用户一次录了多个片段，AI 要怎么判断主线 vs side quest？</pre>
+          </details>
+          <details open>
+            <summary>LLM Output</summary>
+            <pre>**Main Summary**
+核心任务是把语音 onboarding 打磨得更顺，确保首次体验就能引导用户说出第一条想法，并让 AI 输出在多支线场景下保持条理。
+
+**CTA Strategy**
+- 评估首次启动时是否应该直接弹出“说出第一条想法”的 CTA，让用户立即开口。
+- 保持 CTA 语言温暖但明确，避免信息噪音。
+
+**Layout / Highlights Panel**
+- 需要一个 highlights 面板，把 AI 总结放在右侧卡片中，方便临时浏览。
+- 面板应与主编辑区并排，支持快速 skim。
+
+**Multi-clip Logic**
+- 当用户一次录多个片段时，AI 必须识别主线与 side quest。
+- 输出时按主线优先、支线分组，避免把所有内容混在一起。</pre>
+          </details>
+        </div>
+        <div class="io-card">
+          <div class="tag">T3</div>
+          <h4>Emotional Vent</h4>
+          <details>
+            <summary>Input Transcript</summary>
+            <pre>我今天整个人 collapse。录音一堆，但我心里最想说的是：I need a ritual before dumping thoughts，不然每次打开 App 都像被噪音淹没。可其实那个 ritual 也许只是一个 3 秒 breathing animation? maybe. 另外想提醒自己：别忘了在编辑页做一个 emotional check-in slider。</pre>
+          </details>
+          <details open>
+            <summary>LLM Output</summary>
+            <pre>**Main Summary**
+今天情绪几近 collapse，打开 App 像被噪音淹没，我需要一个 ritual 来稳住心绪后再 dump thoughts。
+
+**Ritual Idea**
+- 在录音前触发一个约 3 秒的 breathing animation，帮助进入写作状态。
+- 让 ritual 成为每次语音输入前的小仪式。
+
+**Editor Enhancements**
+- 在编辑页加入 emotional check-in slider，记录当前心情强度。
+- 确保 UI 让人随手可调，不会打断灵感。</pre>
+          </details>
+        </div>
+        <div class="io-card">
+          <div class="tag">T4</div>
+          <h4>Anchored Headings</h4>
+          <details>
+            <summary>Input Transcript</summary>
+            <pre># 核心主线
+想实现一个 living-note，所有碎片随时被吸附。
+# 支线
+1. AI 要自动识别「主线」并在顶部生成 summary。
+2. 如果出现多支线，就拆成模块，像 side bar。
+3. Highlight 之前的 open questions，别淹没。
+# 记录
+其实这些就是想在 prompt 里强调的条目。</pre>
+          </details>
+          <details open>
+            <summary>LLM Output</summary>
+            <pre># 核心主线
+目标是做一个 living-note，让所有碎片随时被吸附并在顶部生成清晰 summary。
+
+# 支线
+1. AI 要自动识别「主线」并在顶部生成 summary，保持连贯。
+2. 如果出现多支线，就拆成模块，像 side bar 那样分栏呈现。
+3. 持续高亮之前的 open questions，避免被淹没在新内容里。
+
+# 记录
+这些就是需要在 prompt 中反复强调的条目，确认每次迭代都覆盖。</pre>
+          </details>
+        </div>
+        <div class="io-card">
+          <div class="tag">T5</div>
+          <h4>Messy Audio Derived</h4>
+          <details>
+            <summary>Input Transcript</summary>
+            <pre>嗯...我刚刚想到一个 layering 的方式，就是先把所有语音片段按时间堆成 stack，然后 AI 先找出 recurring motif，比如“自我怀疑”、“要做 side panel”这些，然后给我一个可以勾选的列表。我还想让 AI 帮我 paraphrase 成更短的 bullet，方便我后来 drag 到编辑区。还有一个 idea，是不是可以在 paraphrase 左边标一个 emoji？这样我可以用颜色扫一眼。</pre>
+          </details>
+          <details open>
+            <summary>LLM Output</summary>
+            <pre>**Main Summary**
+想用 layering 的方式整理语音：先按时间堆成 stack，再让 AI 找 recurring motif 并提供可操作的 paraphrase 列表。
+
+**Layering Flow**
+- 所有语音片段先按时间顺序堆叠，给 AI 完整上下文。
+- 在此基础上再处理 motif 与 paraphrase。
+
+**Motif Detection + Paraphrase**
+- AI 需要先识别 recurring motif（如自我怀疑、side panel 需求），再生成可勾选的列表。
+- 每个 bullet 需更短、可拖进编辑区，保留用户原意。
+
+**Visual Tagging**
+- 在 paraphrase 左侧标记 emoji 或颜色标签，让我扫一眼就选中重点。
+- 颜色 / emoji 应和主题呼应，帮助日后归档。</pre>
+          </details>
+        </div>
+      </div>
+    </section>
+
+    <section class="card comparison-card">
+      <h2>版本指标对比</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Metric</th>
+            <th>v1-baseline</th>
+            <th>v2-shape-aware</th>
+            <th>变化</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Structure Detection</td>
+            <td>2.4</td>
+            <td>4.4</td>
+            <td>+2.0</td>
+          </tr>
+          <tr>
+            <td>Canon Fidelity</td>
+            <td>3.2</td>
+            <td>4.5</td>
+            <td>+1.3</td>
+          </tr>
+          <tr>
+            <td>Actionability</td>
+            <td>2.0</td>
+            <td>4.2</td>
+            <td>+2.2</td>
+          </tr>
+          <tr>
+            <td>Language Integrity</td>
+            <td>4.0</td>
+            <td>4.6</td>
+            <td>+0.6</td>
+          </tr>
+          <tr>
+            <td>Skim Efficiency (s)</td>
+            <td>18</td>
+            <td>11</td>
+            <td>-7</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="card">
+      <h2>下一轮方向 / 你的指令</h2>
+      <div class="notes-grid">
+        <div>
+          <h3>AI 自我反思</h3>
+          <div class="placeholder-box">[Agent notes placeholder]</div>
+        </div>
+        <div>
+          <h3>你的建议</h3>
+          <div class="placeholder-box">[Your suggestion placeholder]</div>
+        </div>
+      </div>
+    </section>
+  </body>
+</html>

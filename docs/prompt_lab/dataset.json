@@ -1,0 +1,67 @@
+[
+  {
+    "id": "T1",
+    "title": "Single storyline – product anxiety dump",
+    "language_profile": "Chinese with small English phrases",
+    "transcript": "昨天又熬夜做 flow，感觉脑子被塞满。其实我只是想把“说出 → 审视 → 激发 → 收集 → 再写下去”这个循环跑起来，可是 UI 每次改完都觉得还是 noisy。我想把主线总结给未来的我听——到底是产品定位不稳，还是我自己在逃避 launch？",
+    "stress_test_goal": "Ensure the prompt outputs one polished paragraph when everything is one thread.",
+    "expected_structure": "Single paragraph that keeps the reflective tone and highlights the core doubt about定位 vs 自我拖延。",
+    "success_rubric": [
+      "Mentions the thinking loop explicitly or implicitly.",
+      "Retains the comparison between product positioning and personal procrastination.",
+      "Keeps the bilingual flavor without switching entirely to English."
+    ]
+  },
+  {
+    "id": "T2",
+    "title": "Multi-branch brainstorming about onboarding",
+    "language_profile": "Chinese primary, English keywords for UI states",
+    "transcript": "主线是 onboarding，尤其是语音入口怎么引导。支线 A：首次启动时要不要直接弹一个“说出第一条想法”的 CTA？支线 B：我需要一个 highlights 面板，把 AI 总结放在右侧卡片。支线 C：如果用户一次录了多个片段，AI 要怎么判断主线 vs side quest？",
+    "stress_test_goal": "Prompt should detect multiple branches and split into sections.",
+    "expected_structure": "Main Summary + sections such as CTA Strategy / Layout / Multi-clip Logic.",
+    "success_rubric": [
+      "Highlights onboarding as the core storyline.",
+      "Each branch gets its own paragraph or bullet group.",
+      "Keeps CTA wording and layout concept intact."
+    ]
+  },
+  {
+    "id": "T3",
+    "title": "Emotional vent + actionable insight",
+    "language_profile": "50/50 Chinese-English",
+    "transcript": "我今天整个人 collapse。录音一堆，但我心里最想说的是：I need a ritual before dumping thoughts，不然每次打开 App 都像被噪音淹没。可其实那个 ritual 也许只是一个 3 秒 breathing animation? maybe. 另外想提醒自己：别忘了在编辑页做一个 emotional check-in slider。",
+    "stress_test_goal": "See if prompt can surface emotion while extracting two actionable ideas.",
+    "expected_structure": "Main Summary that keeps mood, plus subsections for Ritual Idea and Editor Enhancements.",
+    "success_rubric": [
+      "Emotion (collapse/overwhelmed) is acknowledged.",
+      "Breathing animation idea is preserved.",
+      "Emotional slider requirement is clearly labeled."
+    ]
+  },
+  {
+    "id": "T4",
+    "title": "Long wandering transcript with labeled headings",
+    "language_profile": "Chinese headings, mixed body",
+    "transcript": "# 核心主线\n想实现一个 living-note，所有碎片随时被吸附。# 支线\n1. AI 要自动识别「主线」并在顶部生成 summary。\n2. 如果出现多支线，就拆成模块，像 side bar。\n3. Highlight 之前的 open questions，别淹没。\n# 记录\n其实这些就是想在 prompt 里强调的条目。",
+    "stress_test_goal": "Ensure prompt respects # 核心主线 anchor and reuses headings.",
+    "expected_structure": "Keep # 核心主线 first, gently rewrite content, keep sections for 支线 and 记录.",
+    "success_rubric": [
+      "Heading order unchanged.",
+      "List items clarified but not merged away.",
+      "No new data introduced."
+    ]
+  },
+  {
+    "id": "T5",
+    "title": "Messy audio-derived transcript",
+    "language_profile": "Chinese with filler words",
+    "transcript": "嗯...我刚刚想到一个 layering 的方式，就是先把所有语音片段按时间堆成 stack，然后 AI 先找出 recurring motif，比如“自我怀疑”、“要做 side panel”这些，然后给我一个可以勾选的列表。我还想让 AI 帮我 paraphrase 成更短的 bullet，方便我后来 drag 到编辑区。还有一个 idea，是不是可以在 paraphrase 左边标一个 emoji？这样我可以用颜色扫一眼。",
+    "stress_test_goal": "Prompt should transform messy filler-rich text into clear modules with actionable bullets.",
+    "expected_structure": "Main Summary + modules for Layering Flow, Motif Detection, Visual Tagging.",
+    "success_rubric": [
+      "Explains stacking idea before motif detection.",
+      "Preserves paraphrase + drag request.",
+      "Emoji/color tagging mention survives."
+    ]
+  }
+]

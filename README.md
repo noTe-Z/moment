@@ -34,3 +34,13 @@ Moment/
 - 长按并向下滑动，测试录音锁定功能，确认锁定后可松手，再次单击可停止录音。
 - 进入仓库页，确认分组标题（本周/上周/月份周次）以及录音条目按时间倒序排列。
 - 点击列表项，验证播放/暂停与状态高亮。
+
+## Prompt Iteration Lab
+`experiments/prompt-lab` 收录了一个多代理工作流，用来批量运行典型笔记场景、QA 评分，并由“Prompt Strategist”给出下一次迭代建议。执行方式：
+
+```
+cd experiments/prompt-lab
+./run_prompt_lab.py --variant 001_baseline
+```
+
+运行后会在 `experiments/prompt-lab/runs/` 下生成带分数表格与策略建议的报告，可据此更新 `OpenAIRewriteService` 的提示词。
