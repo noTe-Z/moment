@@ -68,57 +68,50 @@ private struct TabButton: View {
 struct RecordingsListView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \Recording.timestamp, order: .reverse) private var recordings: [Recording]
+    @Query(sort: \TextNote.updatedAt, order: .reverse) private var textNotes: [TextNote]
     @StateObject private var playbackManager = PlaybackManager()
     @State private var showPlaybackError = false
     @State private var selectedRecordingForEdit: Recording?
+    @State private var recordingForNoteSelection: Recording?
+    @State private var addToNoteNavigationTarget: AddToNoteNavigationTarget?
     private let recordingStore = RecordingStore()
 
     var body: some View {
+        recordingsList
+    }
+    
+    private var recordingsList: some View {
         List {
-            ForEach(groupedRecordings) { section in
-                Section(section.title) {
-                    ForEach(section.items) { recording in
-                        RecordingRow(
-                            recording: recording,
-                            isPlaying: playbackManager.currentlyPlayingID == recording.id
-                        )
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            playbackManager.toggle(recording: recording)
-                        }
-                        .listRowBackground(
-                            playbackManager.currentlyPlayingID == recording.id
-                            ? Color.accentColor.opacity(0.12)
-                            : Color.clear
-                        )
-                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                            // 删除按钮
-                            Button(role: .destructive) {
-                                if let index = section.items.firstIndex(where: { $0.id == recording.id }) {
-                                    deleteRecordings(at: IndexSet([index]), in: section.items)
-                                }
-                            } label: {
-                                Label("删除", systemImage: "trash")
-                            }
-                            
-                            // 文本编辑按钮
-                            Button {
-                                selectedRecordingForEdit = recording
-                            } label: {
-                                Label("编辑", systemImage: "square.and.pencil")
-                            }
-                            .tint(.blue)
-                        }
-                    }
-                }
-            }
+            recordingSections
             if recordings.isEmpty {
                 emptyState
             }
         }
         .listStyle(.insetGrouped)
+        .sheet(item: $recordingForNoteSelection) { recording in
+            NavigationStack {
+                AddRecordingToNoteSheet(
+                    recording: recording,
+                    notes: textNotes,
+                    selectAction: { note in
+                        recordingForNoteSelection = nil
+                        attachRecording(recording, to: note)
+                    },
+                    createNewAction: {
+                        recordingForNoteSelection = nil
+                        selectedRecordingForEdit = recording
+                    },
+                    cancelAction: {
+                        recordingForNoteSelection = nil
+                    }
+                )
+            }
+        }
         .navigationDestination(item: $selectedRecordingForEdit) { recording in
             TextEditorView(recording: recording)
+        }
+        .navigationDestination(item: $addToNoteNavigationTarget) { target in
+            TextEditorView(recording: target.recording, existingNote: target.note)
         }
         .onChange(of: playbackManager.errorMessage) { newValue in
             showPlaybackError = newValue != nil
@@ -132,6 +125,34 @@ struct RecordingsListView: View {
         })
         .onDisappear {
             playbackManager.stopPlayback()
+        }
+    }
+
+    @ViewBuilder
+    private var recordingSections: some View {
+        ForEach(groupedRecordings) { section in
+            Section(section.title) {
+                ForEach(section.items) { recording in
+                    RecordingListItem(
+                        recording: recording,
+                        isPlaying: playbackManager.currentlyPlayingID == recording.id,
+                        onTogglePlay: {
+                            playbackManager.toggle(recording: recording)
+                        },
+                        onDelete: {
+                            if let index = section.items.firstIndex(where: { $0.id == recording.id }) {
+                                deleteRecordings(at: IndexSet([index]), in: section.items)
+                            }
+                        },
+                        onAddToNote: {
+                            recordingForNoteSelection = recording
+                        },
+                        onEdit: {
+                            selectedRecordingForEdit = recording
+                        }
+                    )
+                }
+            }
         }
     }
 
@@ -165,6 +186,13 @@ struct RecordingsListView: View {
         .sorted(by: { $0.id > $1.id })
     }
     
+    private func attachRecording(_ recording: Recording, to note: TextNote) {
+        note.recordingID = recording.id
+        note.updatedAt = Date()
+        try? modelContext.save()
+        addToNoteNavigationTarget = AddToNoteNavigationTarget(note: note, recording: recording)
+    }
+    
     private func deleteRecordings(at offsets: IndexSet, in sectionItems: [Recording]) {
         for index in offsets {
             let recording = sectionItems[index]
@@ -192,6 +220,68 @@ private struct RecordingSection: Identifiable {
     let items: [Recording]
 }
 
+private struct AddToNoteNavigationTarget: Identifiable, Hashable {
+    let note: TextNote
+    let recording: Recording
+    
+    var id: UUID { note.id }
+    
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(note.id)
+        hasher.combine(recording.id)
+    }
+    
+    static func == (lhs: AddToNoteNavigationTarget, rhs: AddToNoteNavigationTarget) -> Bool {
+        lhs.note.id == rhs.note.id && lhs.recording.id == rhs.recording.id
+    }
+}
+
+private struct RecordingListItem: View {
+    let recording: Recording
+    let isPlaying: Bool
+    let onTogglePlay: () -> Void
+    let onDelete: () -> Void
+    let onAddToNote: () -> Void
+    let onEdit: () -> Void
+    
+    var body: some View {
+        RecordingRow(
+            recording: recording,
+            isPlaying: isPlaying
+        )
+        .contentShape(Rectangle())
+        .onTapGesture {
+            onTogglePlay()
+        }
+        .listRowBackground(
+            isPlaying
+            ? Color.accentColor.opacity(0.12)
+            : Color.clear
+        )
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            Button(role: .destructive) {
+                onDelete()
+            } label: {
+                Label("删除", systemImage: "trash")
+            }
+            
+            Button {
+                onAddToNote()
+            } label: {
+                Label("添加", systemImage: "plus.circle")
+            }
+            .tint(.green)
+            
+            Button {
+                onEdit()
+            } label: {
+                Label("编辑", systemImage: "square.and.pencil")
+            }
+            .tint(.blue)
+        }
+    }
+}
+
 private struct RecordingRow: View {
     let recording: Recording
     let isPlaying: Bool
@@ -212,5 +302,170 @@ private struct RecordingRow: View {
                 .foregroundStyle(isPlaying ? Color.accentColor : Color.secondary)
         }
         .padding(.vertical, 8)
+    }
+}
+
+private struct AddRecordingToNoteSheet: View {
+    let recording: Recording
+    let notes: [TextNote]
+    let selectAction: (TextNote) -> Void
+    let createNewAction: () -> Void
+    let cancelAction: () -> Void
+    
+    var body: some View {
+        List {
+            Section("当前录音") {
+                RecordingSummaryRow(recording: recording)
+                Text("选择一个文本文档，将该录音展示在文本编辑页的关联面板中。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.top, 4)
+            }
+            
+            Section("选择文本文档") {
+                if notes.isEmpty {
+                    EmptyNotesPlaceholder()
+                        .listRowBackground(Color.clear)
+                } else {
+                    ForEach(notes) { note in
+                        Button {
+                            selectAction(note)
+                        } label: {
+                            NoteSelectionRow(
+                                note: note,
+                                isLinkedToCurrentRecording: note.recordingID == recording.id
+                            )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
+        .listStyle(.insetGrouped)
+        .safeAreaInset(edge: .bottom) {
+            Button {
+                createNewAction()
+            } label: {
+                Label("新建结构化表达", systemImage: "square.and.pencil")
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+        }
+        .navigationTitle("添加到文本")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("完成") {
+                    cancelAction()
+                }
+            }
+        }
+    }
+}
+
+private struct RecordingSummaryRow: View {
+    let recording: Recording
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(TimestampFormatter.display(for: recording.timestamp))
+                .font(.headline)
+                .foregroundStyle(.primary)
+            Text("时长 \(TimeFormatter.display(for: recording.duration))")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 4)
+    }
+}
+
+private struct NoteSelectionRow: View {
+    let note: TextNote
+    let isLinkedToCurrentRecording: Bool
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .center, spacing: 8) {
+                Text(note.title.isEmpty ? "无标题" : note.title)
+                    .font(.headline)
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                
+                Spacer()
+                
+                if isLinkedToCurrentRecording {
+                    AttachmentStatusTag(text: "已关联", background: Color.accentColor.opacity(0.15), foreground: Color.accentColor)
+                } else if note.recordingID != nil {
+                    AttachmentStatusTag(text: "已有录音", background: Color.secondary.opacity(0.12), foreground: Color.secondary)
+                }
+                
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+            
+            if let preview = contentPreview {
+                Text(preview)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+            
+            Text("更新于 \(TimestampFormatter.display(for: note.updatedAt))")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 6)
+    }
+    
+    private var contentPreview: String? {
+        let trimmed = note.content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        if trimmed.count > 120 {
+            let endIndex = trimmed.index(trimmed.startIndex, offsetBy: 120)
+            return "\(trimmed[..<endIndex])…"
+        }
+        return trimmed
+    }
+}
+
+private struct AttachmentStatusTag: View {
+    let text: String
+    let background: Color
+    let foreground: Color
+    
+    var body: some View {
+        Text(text)
+            .font(.caption2)
+            .fontWeight(.semibold)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(background)
+            )
+            .foregroundStyle(foreground)
+    }
+}
+
+private struct EmptyNotesPlaceholder: View {
+    var body: some View {
+        VStack(spacing: 8) {
+            Text("还没有文本文档")
+                .font(.headline)
+                .foregroundStyle(.secondary)
+            Text("先创建一个结构化表达，再把录音添加进去。")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity, alignment: .center)
+        .padding(.vertical, 24)
     }
 }
