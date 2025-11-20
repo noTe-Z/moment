@@ -22,6 +22,8 @@
 		B10D03C82C0E4B8200E4A4BD /* TextEditorRecorderViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10D03C72C0E4B8200E4A4BD /* TextEditorRecorderViewModel.swift */; };
 		B10D03CA2C0E4BA100E4A4BD /* AssemblyAITranscriptionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10D03C92C0E4BA100E4A4BD /* AssemblyAITranscriptionService.swift */; };
 		B1A3F7FF2E33A54F00E5E2E3 /* OpenAIRewriteService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1A3F7FE2E33A54F00E5E2E3 /* OpenAIRewriteService.swift */; };
+		B1F98AF12F8AAB1200DEF123 /* RecordingTranscriptionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1F98AF02F8AAB1200DEF123 /* RecordingTranscriptionManager.swift */; };
+		B1F98AF32F8AAB1200DEF123 /* RecordingTranscriptSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1F98AF22F8AAB1200DEF123 /* RecordingTranscriptSheet.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -44,6 +46,8 @@
 		B1A3F7FE2E33A54F00E5E2E3 /* OpenAIRewriteService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenAIRewriteService.swift; sourceTree = "<group>"; };
 		B1D774A12F4A19C800C7AD9A /* Secrets.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Secrets.xcconfig; sourceTree = "<group>"; };
 		B1D774A22F4A19C800C7AD9A /* Secrets.local.xcconfig.example */ = {isa = PBXFileReference; lastKnownFileType = text; path = Secrets.local.xcconfig.example; sourceTree = "<group>"; };
+		B1F98AF02F8AAB1200DEF123 /* RecordingTranscriptionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingTranscriptionManager.swift; sourceTree = "<group>"; };
+		B1F98AF22F8AAB1200DEF123 /* RecordingTranscriptSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingTranscriptSheet.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -81,6 +85,8 @@
 				1F4C8CB72A8C4D25008B1234 /* CaptureView.swift */,
 				1F4C8CB92A8C4D25008B1234 /* CaptureViewModel.swift */,
 				1F4C8CBB2A8C4D25008B1234 /* Recording.swift */,
+				B1F98AF02F8AAB1200DEF123 /* RecordingTranscriptionManager.swift */,
+				B1F98AF22F8AAB1200DEF123 /* RecordingTranscriptSheet.swift */,
 				1F4C8CBD2A8C4D25008B1234 /* RecordingStore.swift */,
 				1F4C8CBF2A8C4D25008B1234 /* PlaybackManager.swift */,
 				1F4C8CC12A8C4D25008B1234 /* RepositoryView.swift */,
@@ -182,6 +188,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				B1F98AF32F8AAB1200DEF123 /* RecordingTranscriptSheet.swift in Sources */,
 				1F4C8CC82A8C4D25008B1234 /* Formatters.swift in Sources */,
 				1F4C8CC22A8C4D25008B1234 /* RepositoryView.swift in Sources */,
 				1F4C8CB82A8C4D25008B1234 /* CaptureView.swift in Sources */,
@@ -193,6 +200,7 @@
 				1F4C8CC92A8C4D25008B1234 /* TextNote.swift in Sources */,
 				1F4C8CCB2A8C4D25008B1234 /* TextEditorView.swift in Sources */,
 				1F4C8CCD2A8C4D25008B1234 /* TextNotesView.swift in Sources */,
+				B1F98AF12F8AAB1200DEF123 /* RecordingTranscriptionManager.swift in Sources */,
 				B10D03CA2C0E4BA100E4A4BD /* AssemblyAITranscriptionService.swift in Sources */,
 				B10D03C82C0E4B8200E4A4BD /* TextEditorRecorderViewModel.swift in Sources */,
 				B1A3F7FF2E33A54F00E5E2E3 /* OpenAIRewriteService.swift in Sources */,

@@ -75,6 +75,8 @@ struct RecordingsListView: View {
     @State private var recordingForNoteSelection: Recording?
     @State private var addToNoteNavigationTarget: AddToNoteNavigationTarget?
     private let recordingStore = RecordingStore()
+    @State private var transcriptViewerRecording: Recording?
+    private let transcriptionManager = RecordingTranscriptionManager.shared
 
     var body: some View {
         recordingsList
@@ -107,6 +109,9 @@ struct RecordingsListView: View {
                 )
             }
         }
+        .sheet(item: $transcriptViewerRecording) { recording in
+            RecordingTranscriptSheet(recording: recording)
+        }
         .navigationDestination(item: $selectedRecordingForEdit) { recording in
             TextEditorView(recording: recording)
         }
@@ -125,6 +130,12 @@ struct RecordingsListView: View {
         })
         .onDisappear {
             playbackManager.stopPlayback()
+        }
+        .onAppear {
+            ensureTranscriptions()
+        }
+        .onChange(of: recordings.map(\.id)) { _ in
+            ensureTranscriptions()
         }
     }
 
@@ -149,6 +160,12 @@ struct RecordingsListView: View {
                         },
                         onEdit: {
                             selectedRecordingForEdit = recording
+                        },
+                        onViewTranscript: {
+                            transcriptViewerRecording = recording
+                        },
+                        onRetryTranscription: {
+                            transcriptionManager.retryTranscription(for: recording, in: modelContext)
                         }
                     )
                 }
@@ -190,6 +207,7 @@ struct RecordingsListView: View {
         note.appendRecordingID(recording.id)
         note.updatedAt = Date()
         try? modelContext.save()
+        transcriptionManager.ensureTranscript(for: recording, in: modelContext)
         addToNoteNavigationTarget = AddToNoteNavigationTarget(note: note, recording: recording)
     }
     
@@ -211,6 +229,11 @@ struct RecordingsListView: View {
         
         // 保存更改
         try? modelContext.save()
+    }
+    
+    private func ensureTranscriptions() {
+        guard !recordings.isEmpty else { return }
+        transcriptionManager.ensureTranscripts(for: recordings, in: modelContext)
     }
 }
 
@@ -243,11 +266,15 @@ private struct RecordingListItem: View {
     let onDelete: () -> Void
     let onAddToNote: () -> Void
     let onEdit: () -> Void
+    let onViewTranscript: () -> Void
+    let onRetryTranscription: () -> Void
     
     var body: some View {
         RecordingRow(
             recording: recording,
-            isPlaying: isPlaying
+            isPlaying: isPlaying,
+            onViewTranscript: onViewTranscript,
+            onRetryTranscription: onRetryTranscription
         )
         .contentShape(Rectangle())
         .onTapGesture {
@@ -279,29 +306,110 @@ private struct RecordingListItem: View {
             }
             .tint(.blue)
         }
+        .contextMenu {
+            Button("查看转写") {
+                onViewTranscript()
+            }
+            .disabled(!recording.hasTranscript)
+            
+            Button("重新转写") {
+                onRetryTranscription()
+            }
+        }
     }
 }
 
 private struct RecordingRow: View {
     let recording: Recording
     let isPlaying: Bool
+    let onViewTranscript: () -> Void
+    let onRetryTranscription: () -> Void
 
     var body: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 4) {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 6) {
                 Text(TimestampFormatter.display(for: recording.timestamp))
                     .font(.headline)
                     .foregroundStyle(.primary)
                 Text("时长 \(TimeFormatter.display(for: recording.duration))")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+                if let status = statusText {
+                    Text(status)
+                        .font(.caption)
+                        .foregroundStyle(statusColor)
+                }
             }
             Spacer()
+            transcriptAccessory
             Image(systemName: isPlaying ? "pause.circle.fill" : "play.circle.fill")
                 .font(.system(size: 28, weight: .semibold))
                 .foregroundStyle(isPlaying ? Color.accentColor : Color.secondary)
         }
         .padding(.vertical, 8)
+    }
+    
+    @ViewBuilder
+    private var transcriptAccessory: some View {
+        switch recording.transcriptionStatus {
+        case .processing:
+            ProgressView()
+                .progressViewStyle(.circular)
+                .frame(width: 24, height: 24)
+        case .failed:
+            Button(action: onRetryTranscription) {
+                Image(systemName: "arrow.clockwise.circle")
+                    .font(.system(size: 24, weight: .semibold))
+                    .foregroundStyle(.orange)
+            }
+            .buttonStyle(.plain)
+        case .completed:
+            Button(action: onViewTranscript) {
+                Image(systemName: "doc.text.magnifyingglass")
+                    .font(.system(size: 24, weight: .semibold))
+                    .foregroundStyle(Color.accentColor)
+            }
+            .buttonStyle(.plain)
+        case .queued, .idle:
+            if recording.hasTranscript {
+                Button(action: onViewTranscript) {
+                    Image(systemName: "doc.text.magnifyingglass")
+                        .font(.system(size: 24, weight: .semibold))
+                        .foregroundStyle(Color.accentColor)
+                }
+                .buttonStyle(.plain)
+            } else {
+                Image(systemName: "text.badge.plus")
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+    
+    private var statusText: String? {
+        switch recording.transcriptionStatus {
+        case .processing:
+            return "转写中…"
+        case .failed:
+            return recording.transcriptionErrorMessage ?? "转写失败"
+        case .queued, .idle:
+            return recording.hasTranscript ? nil : "等待转写"
+        case .completed:
+            return nil
+        }
+    }
+    
+    private var statusColor: Color {
+        switch recording.transcriptionStatus {
+        case .failed:
+            return .orange
+        case .processing:
+            return .secondary
+        case .queued, .idle:
+            return .secondary
+        case .completed:
+            return .secondary
+        }
     }
 }
 

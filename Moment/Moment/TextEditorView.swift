@@ -28,6 +28,9 @@ struct TextEditorView: View {
     
     @State private var recorderErrorMessage: String?
     @State private var showRecorderError = false
+    @State private var transcriptViewerRecording: Recording?
+    
+    private let transcriptionManager = RecordingTranscriptionManager.shared
     
     // 用于跟踪是否是新创建的笔记
     private let isNewNote: Bool
@@ -62,6 +65,12 @@ struct TextEditorView: View {
                     playAction: { recording in
                         highlightedRecordingID = recording.id
                         playbackManager.toggle(recording: recording)
+                    },
+                    viewTranscriptAction: { recording in
+                        transcriptViewerRecording = recording
+                    },
+                    retryTranscriptionAction: { recording in
+                        transcriptionManager.retryTranscription(for: recording, in: modelContext)
                     }
                 )
                 .padding(.horizontal, 16)
@@ -71,9 +80,13 @@ struct TextEditorView: View {
         }
         .onAppear {
             loadAssociatedRecordingsIfNeeded()
+            ensureTranscriptionsForAssociatedRecordings()
         }
         .onDisappear {
             playbackManager.stopPlayback()
+        }
+        .onChange(of: associatedRecordings.map(\.id)) { _ in
+            ensureTranscriptionsForAssociatedRecordings()
         }
         .onChange(of: playbackManager.errorMessage) { newValue in
             showPlaybackError = newValue != nil
@@ -126,6 +139,9 @@ struct TextEditorView: View {
                     .progressViewStyle(.circular)
                     .padding()
             }
+        }
+        .sheet(item: $transcriptViewerRecording) { recording in
+            RecordingTranscriptSheet(recording: recording)
         }
     }
     
@@ -351,6 +367,8 @@ struct TextEditorView: View {
         if highlightedRecordingID == nil {
             highlightedRecordingID = recording?.id ?? associatedRecordings.first?.id
         }
+        
+        ensureTranscriptionsForAssociatedRecordings()
     }
     
     private func uniqueRecordings(from recordings: [Recording]) -> [Recording] {
@@ -363,6 +381,11 @@ struct TextEditorView: View {
             }
         }
         return result
+    }
+    
+    private func ensureTranscriptionsForAssociatedRecordings() {
+        guard !associatedRecordings.isEmpty else { return }
+        transcriptionManager.ensureTranscripts(for: associatedRecordings, in: modelContext)
     }
     
     private var recordingIDsForPersistence: [UUID] {
@@ -431,9 +454,9 @@ struct TextEditorView: View {
     }
     
     private func handleRewriteButtonTapped() {
-        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
-            rewriteErrorMessage = "笔记内容为空，无法整理。"
+        let requestText = buildAIRequestText()
+        guard !requestText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            rewriteErrorMessage = "当前没有可整理的内容。"
             showRewriteError = true
             return
         }
@@ -444,7 +467,6 @@ struct TextEditorView: View {
         
         isRewriting = true
         rewriteSourceSnapshot = content
-        let requestText = trimmed
         
         Task {
             do {
@@ -523,6 +545,38 @@ struct TextEditorView: View {
             content.append(trimmed)
         }
     }
+    
+    private func buildAIRequestText() -> String {
+        var payload = content
+        let trimmedContent = payload.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmedContent.isEmpty {
+            payload = ""
+        }
+        
+        let transcriptBlocks = transcriptContextBlocks()
+        guard !transcriptBlocks.isEmpty else {
+            return payload.isEmpty ? trimmedContent : payload
+        }
+        
+        var appendableBlocks = ["# 关联录音转写（隐藏）"]
+        appendableBlocks.append(contentsOf: transcriptBlocks)
+        let transcriptSection = appendableBlocks.joined(separator: "\n\n")
+        
+        if payload.isEmpty {
+            return transcriptSection
+        } else {
+            return payload + "\n\n" + transcriptSection
+        }
+    }
+    
+    private func transcriptContextBlocks() -> [String] {
+        associatedRecordings.compactMap { recording in
+            guard let transcript = recording.normalizedTranscriptText else { return nil }
+            let timestampText = TimestampFormatter.display(for: recording.timestamp)
+            let durationText = TimeFormatter.display(for: recording.duration)
+            return "[\(timestampText) · \(durationText)]\n\(transcript)"
+        }
+    }
 }
 
 // MARK: - Supporting Views
@@ -567,6 +621,8 @@ private struct RecordingPreviewListPanel: View {
     let highlightedRecordingID: UUID?
     let currentlyPlayingID: UUID?
     let playAction: (Recording) -> Void
+    let viewTranscriptAction: (Recording) -> Void
+    let retryTranscriptionAction: (Recording) -> Void
     
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -582,7 +638,9 @@ private struct RecordingPreviewListPanel: View {
                     recording: recording,
                     isHighlighted: highlightedRecordingID == recording.id,
                     isPlaying: currentlyPlayingID == recording.id,
-                    playAction: { playAction(recording) }
+                    playAction: { playAction(recording) },
+                    viewTranscriptAction: { viewTranscriptAction(recording) },
+                    retryTranscriptionAction: { retryTranscriptionAction(recording) }
                 )
             }
         }
@@ -601,19 +659,29 @@ private struct RecordingPreviewRow: View {
     let isHighlighted: Bool
     let isPlaying: Bool
     let playAction: () -> Void
+    let viewTranscriptAction: () -> Void
+    let retryTranscriptionAction: () -> Void
     
     var body: some View {
         HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 6) {
                 Text(TimestampFormatter.display(for: recording.timestamp))
                     .font(.headline)
                     .foregroundStyle(.primary)
                 Text("时长 \(TimeFormatter.display(for: recording.duration))")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+                
+                if let status = statusText {
+                    Text(status)
+                        .font(.caption)
+                        .foregroundStyle(statusColor)
+                }
             }
             
             Spacer()
+            
+            transcriptControl
             
             Button(action: playAction) {
                 Image(systemName: isPlaying ? "pause.circle.fill" : "play.circle.fill")
@@ -631,6 +699,82 @@ private struct RecordingPreviewRow: View {
                     : Color(UIColor.secondarySystemBackground)
                 )
         )
+        .contextMenu {
+            Button("查看转写") {
+                viewTranscriptAction()
+            }
+            .disabled(!recording.hasTranscript)
+            
+            Button("重新转写") {
+                retryTranscriptionAction()
+            }
+        }
+    }
+    
+    @ViewBuilder
+    private var transcriptControl: some View {
+        switch recording.transcriptionStatus {
+        case .processing:
+            ProgressView()
+                .progressViewStyle(.circular)
+                .frame(width: 32, height: 32)
+        case .failed:
+            Button(action: retryTranscriptionAction) {
+                Image(systemName: "arrow.clockwise.circle")
+                    .font(.system(size: 28, weight: .semibold))
+                    .foregroundStyle(.orange)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("重新转写")
+        case .completed:
+            Button(action: viewTranscriptAction) {
+                Image(systemName: "doc.text.magnifyingglass")
+                    .font(.system(size: 28, weight: .semibold))
+                    .foregroundStyle(Color.accentColor)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("查看转写")
+        case .queued, .idle:
+            if recording.hasTranscript {
+                Button(action: viewTranscriptAction) {
+                    Image(systemName: "doc.text.magnifyingglass")
+                        .font(.system(size: 28, weight: .semibold))
+                        .foregroundStyle(Color.accentColor)
+                }
+                .buttonStyle(.plain)
+            } else {
+                Image(systemName: "text.badge.plus")
+                    .font(.system(size: 26, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .accessibilityLabel("等待转写")
+            }
+        }
+    }
+    
+    private var statusText: String? {
+        switch recording.transcriptionStatus {
+        case .processing:
+            return "转写中…"
+        case .failed:
+            return recording.transcriptionErrorMessage ?? "转写失败"
+        case .queued, .idle:
+            return recording.hasTranscript ? nil : "等待转写"
+        case .completed:
+            return nil
+        }
+    }
+    
+    private var statusColor: Color {
+        switch recording.transcriptionStatus {
+        case .failed:
+            return .orange
+        case .processing:
+            return .secondary
+        case .queued, .idle:
+            return .secondary
+        case .completed:
+            return .secondary
+        }
     }
 }
 
