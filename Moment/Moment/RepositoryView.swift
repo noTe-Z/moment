@@ -187,7 +187,7 @@ struct RecordingsListView: View {
     }
     
     private func attachRecording(_ recording: Recording, to note: TextNote) {
-        note.recordingID = recording.id
+        note.appendRecordingID(recording.id)
         note.updatedAt = Date()
         try? modelContext.save()
         addToNoteNavigationTarget = AddToNoteNavigationTarget(note: note, recording: recording)
@@ -333,7 +333,8 @@ private struct AddRecordingToNoteSheet: View {
                         } label: {
                             NoteSelectionRow(
                                 note: note,
-                                isLinkedToCurrentRecording: note.recordingID == recording.id
+                                isLinkedToCurrentRecording: note.allRecordingIDs.contains(recording.id),
+                                totalLinkedCount: note.allRecordingIDs.count
                             )
                         }
                         .buttonStyle(.plain)
@@ -387,6 +388,7 @@ private struct RecordingSummaryRow: View {
 private struct NoteSelectionRow: View {
     let note: TextNote
     let isLinkedToCurrentRecording: Bool
+    let totalLinkedCount: Int
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -399,9 +401,17 @@ private struct NoteSelectionRow: View {
                 Spacer()
                 
                 if isLinkedToCurrentRecording {
-                    AttachmentStatusTag(text: "已关联", background: Color.accentColor.opacity(0.15), foreground: Color.accentColor)
-                } else if note.recordingID != nil {
-                    AttachmentStatusTag(text: "已有录音", background: Color.secondary.opacity(0.12), foreground: Color.secondary)
+                    AttachmentStatusTag(
+                        text: "已关联",
+                        background: Color.accentColor.opacity(0.15),
+                        foreground: Color.accentColor
+                    )
+                } else if totalLinkedCount > 0 {
+                    AttachmentStatusTag(
+                        text: "已有 \(totalLinkedCount) 个录音",
+                        background: Color.secondary.opacity(0.12),
+                        foreground: Color.secondary
+                    )
                 }
                 
                 Image(systemName: "chevron.right")

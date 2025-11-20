@@ -12,8 +12,9 @@ struct TextEditorView: View {
     @State private var title: String
     @State private var content: String
     @State private var dragOffset: CGFloat = 0
-    @State private var associatedRecording: Recording?
+    @State private var associatedRecordings: [Recording]
     @State private var showRecordingPanel = false
+    @State private var highlightedRecordingID: UUID?
     @State private var showPlaybackError = false
     @State private var isRewriting = false
     @State private var showRewritePreview = false
@@ -40,7 +41,8 @@ struct TextEditorView: View {
         // 初始化状态
         _title = State(initialValue: existingNote?.title ?? "")
         _content = State(initialValue: existingNote?.content ?? "")
-        _associatedRecording = State(initialValue: recording)
+        _associatedRecordings = State(initialValue: recording.map { [$0] } ?? [])
+        _highlightedRecordingID = State(initialValue: recording?.id)
     }
     
     var body: some View {
@@ -52,11 +54,15 @@ struct TextEditorView: View {
                 .gesture(dismissDragGesture)
         )
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            if showRecordingPanel, let associatedRecording {
-                RecordingPreviewPanel(
-                    recording: associatedRecording,
-                    isPlaying: playbackManager.currentlyPlayingID == associatedRecording.id,
-                    playAction: { playbackManager.toggle(recording: associatedRecording) }
+            if showRecordingPanel, !associatedRecordings.isEmpty {
+                RecordingPreviewListPanel(
+                    recordings: associatedRecordings,
+                    highlightedRecordingID: highlightedRecordingID,
+                    currentlyPlayingID: playbackManager.currentlyPlayingID,
+                    playAction: { recording in
+                        highlightedRecordingID = recording.id
+                        playbackManager.toggle(recording: recording)
+                    }
                 )
                 .padding(.horizontal, 16)
                 .padding(.bottom, 12)
@@ -64,7 +70,7 @@ struct TextEditorView: View {
             }
         }
         .onAppear {
-            resolveAssociatedRecordingIfNeeded()
+            loadAssociatedRecordingsIfNeeded()
         }
         .onDisappear {
             playbackManager.stopPlayback()
@@ -246,13 +252,13 @@ struct TextEditorView: View {
     
     @ViewBuilder
     private var associatedRecordingToolbarButton: some View {
-        if associatedRecording != nil {
+        if !associatedRecordings.isEmpty {
             Button {
                 withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
                     showRecordingPanel.toggle()
                 }
             } label: {
-                RecordingAccessoryIcon(isActive: showRecordingPanel)
+                RecordingAccessoryIcon(isActive: showRecordingPanel, count: associatedRecordings.count)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("显示关联录音")
@@ -282,20 +288,20 @@ struct TextEditorView: View {
         if !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
            !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             
+            let currentRecordingIDs = recordingIDsForPersistence
+            
             if let existingNote = existingNote {
                 // 更新现有笔记
                 existingNote.title = title
                 existingNote.content = content
                 existingNote.updatedAt = Date()
-                if existingNote.recordingID == nil {
-                    existingNote.recordingID = (associatedRecording ?? recording)?.id
-                }
+                existingNote.setRecordingIDs(currentRecordingIDs)
             } else {
                 // 创建新笔记
                 let newNote = TextNote(
                     title: title.isEmpty ? "无标题" : title,
                     content: content,
-                    recordingID: (associatedRecording ?? recording)?.id
+                    recordingIDs: currentRecordingIDs
                 )
                 modelContext.insert(newNote)
             }
@@ -306,13 +312,74 @@ struct TextEditorView: View {
         dismiss()
     }
     
-    private func resolveAssociatedRecordingIfNeeded() {
-        if associatedRecording == nil, let targetID = existingNote?.recordingID {
-            let descriptor = FetchDescriptor<Recording>(predicate: #Predicate { $0.id == targetID })
-            if let resolved = try? modelContext.fetch(descriptor).first {
-                associatedRecording = resolved
+    private func loadAssociatedRecordingsIfNeeded() {
+        var merged: [Recording] = associatedRecordings
+        var orderMap: [UUID: Int] = [:]
+        
+        if let existingNote {
+            existingNote.migrateLegacyRecordingIfNeeded()
+            let ids = existingNote.allRecordingIDs
+            for (index, id) in ids.enumerated() {
+                orderMap[id] = index
+            }
+            
+            if !ids.isEmpty {
+                let descriptor = FetchDescriptor<Recording>(predicate: #Predicate { ids.contains($0.id) })
+                if let fetched = try? modelContext.fetch(descriptor) {
+                    merged.append(contentsOf: fetched)
+                }
             }
         }
+        
+        if let recording {
+            merged.append(recording)
+            if orderMap[recording.id] == nil {
+                orderMap[recording.id] = -1
+            }
+        }
+        
+        let unique = uniqueRecordings(from: merged)
+        associatedRecordings = unique.sorted { lhs, rhs in
+            let lhsOrder = orderMap[lhs.id] ?? Int.max
+            let rhsOrder = orderMap[rhs.id] ?? Int.max
+            if lhsOrder == rhsOrder {
+                return lhs.timestamp > rhs.timestamp
+            }
+            return lhsOrder < rhsOrder
+        }
+        
+        if highlightedRecordingID == nil {
+            highlightedRecordingID = recording?.id ?? associatedRecordings.first?.id
+        }
+    }
+    
+    private func uniqueRecordings(from recordings: [Recording]) -> [Recording] {
+        var seen = Set<UUID>()
+        var result: [Recording] = []
+        for recording in recordings {
+            if !seen.contains(recording.id) {
+                seen.insert(recording.id)
+                result.append(recording)
+            }
+        }
+        return result
+    }
+    
+    private var recordingIDsForPersistence: [UUID] {
+        var ids = associatedRecordings.map(\.id)
+        if ids.isEmpty {
+            if let recording {
+                ids = [recording.id]
+            } else if let existingNote {
+                ids = existingNote.allRecordingIDs
+            }
+        }
+        
+        var unique: [UUID] = []
+        for id in ids where !unique.contains(id) {
+            unique.append(id)
+        }
+        return unique
     }
 
     private func persistFailedRecordingSnapshot(_ snapshot: TextEditorRecorderViewModel.RecordingSnapshot) {
@@ -323,8 +390,11 @@ struct TextEditorView: View {
         )
         modelContext.insert(recording)
         try? modelContext.save()
-        associatedRecording = recording
+        associatedRecordings = uniqueRecordings(from: [recording] + associatedRecordings)
+        highlightedRecordingID = recording.id
         showRecordingPanel = true
+        existingNote?.appendRecordingID(recording.id)
+        try? modelContext.save()
         recorderViewModel.markFallbackRecordingHandled()
     }
     
@@ -459,58 +529,62 @@ struct TextEditorView: View {
 
 private struct RecordingAccessoryIcon: View {
     let isActive: Bool
+    let count: Int
     
     var body: some View {
-        Image(systemName: "list.bullet.circle\(isActive ? ".fill" : "")")
-            .font(.system(size: 24, weight: .semibold))
-            .foregroundStyle(isActive ? Color.accentColor : Color.secondary)
-            .padding(10)
-            .background(
-                Circle()
-                    .fill(
-                        isActive
-                        ? Color.accentColor.opacity(0.12)
-                        : Color.secondary.opacity(0.1)
+        ZStack(alignment: .topTrailing) {
+            Image(systemName: "list.bullet.circle\(isActive ? ".fill" : "")")
+                .font(.system(size: 24, weight: .semibold))
+                .foregroundStyle(isActive ? Color.accentColor : Color.secondary)
+                .padding(10)
+                .background(
+                    Circle()
+                        .fill(
+                            isActive
+                            ? Color.accentColor.opacity(0.12)
+                            : Color.secondary.opacity(0.1)
+                        )
+                )
+            
+            if count > 1 {
+                Text(count > 99 ? "99+" : "\(count)")
+                    .font(.caption2.bold())
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .background(
+                        Capsule(style: .continuous)
+                            .fill(Color.accentColor)
                     )
-            )
+                    .offset(x: 6, y: -6)
+            }
+        }
     }
 }
 
-private struct RecordingPreviewPanel: View {
-    let recording: Recording
-    let isPlaying: Bool
-    let playAction: () -> Void
+private struct RecordingPreviewListPanel: View {
+    let recordings: [Recording]
+    let highlightedRecordingID: UUID?
+    let currentlyPlayingID: UUID?
+    let playAction: (Recording) -> Void
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("关联录音")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            
-            HStack(spacing: 12) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(TimestampFormatter.display(for: recording.timestamp))
-                        .font(.headline)
-                        .foregroundStyle(.primary)
-                    Text("时长 \(TimeFormatter.display(for: recording.duration))")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-                
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                Text("关联录音 (\(recordings.count))")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 Spacer()
-                
-                Button(action: playAction) {
-                    Image(systemName: isPlaying ? "pause.circle.fill" : "play.circle.fill")
-                        .font(.system(size: 34, weight: .semibold))
-                        .foregroundStyle(isPlaying ? Color.accentColor : Color.secondary)
-                }
-                .buttonStyle(.plain)
             }
-            .padding(16)
-            .background(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(Color(UIColor.secondarySystemBackground))
-            )
+            
+            ForEach(recordings) { recording in
+                RecordingPreviewRow(
+                    recording: recording,
+                    isHighlighted: highlightedRecordingID == recording.id,
+                    isPlaying: currentlyPlayingID == recording.id,
+                    playAction: { playAction(recording) }
+                )
+            }
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -519,6 +593,44 @@ private struct RecordingPreviewPanel: View {
                 .fill(.thinMaterial)
         )
         .shadow(color: Color.black.opacity(0.05), radius: 10, x: 0, y: 6)
+    }
+}
+
+private struct RecordingPreviewRow: View {
+    let recording: Recording
+    let isHighlighted: Bool
+    let isPlaying: Bool
+    let playAction: () -> Void
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(TimestampFormatter.display(for: recording.timestamp))
+                    .font(.headline)
+                    .foregroundStyle(.primary)
+                Text("时长 \(TimeFormatter.display(for: recording.duration))")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            
+            Spacer()
+            
+            Button(action: playAction) {
+                Image(systemName: isPlaying ? "pause.circle.fill" : "play.circle.fill")
+                    .font(.system(size: 32, weight: .semibold))
+                    .foregroundStyle(isPlaying ? Color.accentColor : Color.secondary)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(
+                    isHighlighted
+                    ? Color.accentColor.opacity(0.12)
+                    : Color(UIColor.secondarySystemBackground)
+                )
+        )
     }
 }
 
