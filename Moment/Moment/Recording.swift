@@ -8,6 +8,7 @@ final class Recording {
     var duration: TimeInterval
     var fileName: String
     var transcriptText: String?
+    var polishedTranscriptText: String?
     var transcriptUpdatedAt: Date?
     var transcriptionErrorMessage: String?
     var transcriptionRequestedAt: Date?
@@ -47,6 +48,9 @@ extension Recording {
     }
     
     var normalizedTranscriptText: String? {
+        if let polished = polishedTranscriptText?.trimmingCharacters(in: .whitespacesAndNewlines), !polished.isEmpty {
+            return polished
+        }
         guard let raw = transcriptText?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else {
             return nil
         }
