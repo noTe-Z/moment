@@ -6,6 +6,13 @@ import UIKit
 struct RecordingTranscriptSheet: View {
     let recording: Recording
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
+    
+    @State private var isPolishing = false
+    @State private var polishErrorMessage: String?
+    @State private var showPolishErrorAlert = false
+    
+    private let polishService = OpenAITranscriptPolishService()
     
     private var transcriptText: String? {
         recording.normalizedTranscriptText
@@ -37,6 +44,11 @@ struct RecordingTranscriptSheet: View {
                 }
             }
         }
+        .alert("润色失败", isPresented: $showPolishErrorAlert) {
+            Button("好的", role: .cancel) { polishErrorMessage = nil }
+        } message: {
+            Text(polishErrorMessage ?? "请稍后再试。")
+        }
     }
     
     private var metadataSection: some View {
@@ -54,6 +66,36 @@ struct RecordingTranscriptSheet: View {
                 Label(status.text, systemImage: status.symbol)
                     .font(.footnote)
                     .foregroundStyle(status.color)
+            }
+            
+            if shouldShowPolishSection {
+                Divider().padding(.vertical, 4)
+                
+                if isPolishing {
+                    HStack(spacing: 8) {
+                        ProgressView()
+                        Text("润色中…")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                } else if hasBeenPolished {
+                    HStack(spacing: 8) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(.green)
+                        Text("已润色")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                } else {
+                    Button {
+                        polishTranscript()
+                    } label: {
+                        Label("润色文本", systemImage: "wand.and.stars")
+                            .font(.subheadline.bold())
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(Color.accentColor)
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -118,6 +160,42 @@ struct RecordingTranscriptSheet: View {
             return ("排队等待转写", "hourglass", .secondary)
         case .idle:
             return recording.hasTranscript ? ("已缓存转写", "text.quote", .secondary) : ("等待转写", "text.badge.plus", .secondary)
+        }
+    }
+    
+    private var hasBeenPolished: Bool {
+        recording.polishedTranscriptText?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+    }
+    
+    private var shouldShowPolishSection: Bool {
+        recording.transcriptText?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+    }
+    
+    private func polishTranscript() {
+        guard let text = recording.transcriptText?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty else {
+            polishErrorMessage = "当前没有可润色的转写文本。"
+            showPolishErrorAlert = true
+            return
+        }
+        
+        isPolishing = true
+        Task {
+            do {
+                let polished = try await polishService.polish(text: text)
+                await MainActor.run {
+                    recording.transcriptText = polished
+                    recording.polishedTranscriptText = polished
+                    recording.transcriptUpdatedAt = Date()
+                    try? modelContext.save()
+                    isPolishing = false
+                }
+            } catch {
+                await MainActor.run {
+                    polishErrorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                    showPolishErrorAlert = true
+                    isPolishing = false
+                }
+            }
         }
     }
 }

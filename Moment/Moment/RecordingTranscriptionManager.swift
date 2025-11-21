@@ -17,7 +17,6 @@ final class RecordingTranscriptionManager: ObservableObject {
     }
     
     private let transcriptionService = AssemblyAITranscriptionService()
-    private let transcriptPolishService = OpenAITranscriptPolishService()
     private var activeTasks: [UUID: Task<Void, Never>] = [:]
     private var pendingJobs: [QueuedJob] = []
     private var scheduledWakeTask: Task<Void, Never>?
@@ -177,8 +176,7 @@ private extension RecordingTranscriptionManager {
             do {
                 let transcript = try await self.transcriptionService.transcribeAudioFile(at: fileURL)
                 try Task.checkCancellation()
-                let polished = try? await self.transcriptPolishService.polish(text: transcript)
-                await self.handleSuccess(transcript: transcript, polished: polished, recordingID: recordingID, context: context)
+                await self.handleSuccess(transcript: transcript, polished: nil, recordingID: recordingID, context: context)
             } catch is CancellationError {
                 await self.handleCancellation(recordingID: recordingID, context: context)
             } catch let error as AssemblyAITranscriptionService.TranscriptionError {
