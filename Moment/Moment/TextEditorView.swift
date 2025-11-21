@@ -708,6 +708,7 @@ private struct RecordingPreviewRow: View {
             Button("重新转写") {
                 retryTranscriptionAction()
             }
+            .disabled(!recording.canManualRetryTranscription)
         }
     }
     
@@ -726,6 +727,7 @@ private struct RecordingPreviewRow: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel("重新转写")
+            .disabled(!recording.canManualRetryTranscription)
         case .completed:
             Button(action: viewTranscriptAction) {
                 Image(systemName: "doc.text.magnifyingglass")
@@ -734,7 +736,26 @@ private struct RecordingPreviewRow: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel("查看转写")
-        case .queued, .idle:
+        case .queued:
+            if recording.hasTranscript {
+                Button(action: viewTranscriptAction) {
+                    Image(systemName: "doc.text.magnifyingglass")
+                        .font(.system(size: 28, weight: .semibold))
+                        .foregroundStyle(Color.accentColor)
+                }
+                .buttonStyle(.plain)
+            } else if recording.isWaitingForScheduledRetry {
+                Image(systemName: "clock.badge.exclamationmark")
+                    .font(.system(size: 26, weight: .semibold))
+                    .foregroundStyle(.orange)
+                    .accessibilityLabel("等待自动重试")
+            } else {
+                Image(systemName: "hourglass")
+                    .font(.system(size: 26, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .accessibilityLabel("排队中")
+            }
+        case .idle:
             if recording.hasTranscript {
                 Button(action: viewTranscriptAction) {
                     Image(systemName: "doc.text.magnifyingglass")
@@ -757,7 +778,9 @@ private struct RecordingPreviewRow: View {
             return "转写中…"
         case .failed:
             return recording.transcriptionErrorMessage ?? "转写失败"
-        case .queued, .idle:
+        case .queued:
+            return recording.queuedStatusDescription() ?? (recording.hasTranscript ? nil : "排队等待转写")
+        case .idle:
             return recording.hasTranscript ? nil : "等待转写"
         case .completed:
             return nil
@@ -770,7 +793,9 @@ private struct RecordingPreviewRow: View {
             return .orange
         case .processing:
             return .secondary
-        case .queued, .idle:
+        case .queued:
+            return recording.isWaitingForScheduledRetry ? .orange : .secondary
+        case .idle:
             return .secondary
         case .completed:
             return .secondary

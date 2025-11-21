@@ -5,6 +5,7 @@ struct CaptureView: View {
     @Environment(\.modelContext) private var modelContext
     @StateObject private var viewModel = CaptureViewModel()
     @State private var didBindContext = false
+    @State private var didResumeTranscriptions = false
     @State private var gestureActive = false
     @State private var showRepository = false
     @State private var dragOffset: CGSize = .zero
@@ -44,6 +45,10 @@ struct CaptureView: View {
             if !didBindContext {
                 viewModel.bind(context: modelContext)
                 didBindContext = true
+            }
+            if !didResumeTranscriptions {
+                RecordingTranscriptionManager.shared.resumePendingTranscriptions(in: modelContext)
+                didResumeTranscriptions = true
             }
         }
         .alert("麦克风权限被拒绝", isPresented: $viewModel.microphoneDenied, actions: {

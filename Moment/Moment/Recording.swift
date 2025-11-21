@@ -11,7 +11,10 @@ final class Recording {
     var transcriptUpdatedAt: Date?
     var transcriptionErrorMessage: String?
     var transcriptionRequestedAt: Date?
-    private var transcriptionStatusRawValue: String = TranscriptionStatus.idle.rawValue
+    var transcriptionRetryCount: Int = 0
+    var transcriptionLastAttemptAt: Date?
+    var transcriptionNextRetryAt: Date?
+    var transcriptionStatusRawValue: String = TranscriptionStatus.idle.rawValue
 
     init(id: UUID = UUID(), timestamp: Date, duration: TimeInterval, fileName: String) {
         self.id = id
@@ -51,16 +54,46 @@ extension Recording {
     }
     
     var needsAutomaticTranscription: Bool {
+        guard !hasTranscript else { return false }
         switch transcriptionStatus {
-        case .idle, .queued:
-            return !hasTranscript
-        case .failed:
-            // allow retry only when there is no successful transcript
-            return !hasTranscript
+        case .completed:
+            return false
         case .processing:
             return false
-        case .completed:
-            return !hasTranscript
+        default:
+            return true
         }
     }
+    
+    var isWaitingForScheduledRetry: Bool {
+        guard let nextRetryAt = transcriptionNextRetryAt else { return false }
+        return nextRetryAt > Date()
+    }
+    
+    var canAttemptTranscriptionImmediately: Bool {
+        guard needsAutomaticTranscription else { return false }
+        if isWaitingForScheduledRetry {
+            return false
+        }
+        return true
+    }
+    
+    var canManualRetryTranscription: Bool {
+        !isWaitingForScheduledRetry && transcriptionStatus != .processing
+    }
+    
+    func queuedStatusDescription(referenceDate: Date = Date()) -> String? {
+        guard transcriptionStatus == .queued else { return nil }
+        if let nextRetryAt = transcriptionNextRetryAt, nextRetryAt > referenceDate {
+            let relative = Recording.relativeFormatter.localizedString(for: nextRetryAt, relativeTo: referenceDate)
+            return "达到并发上限，\(relative) 后自动重试"
+        }
+        return "排队等待转写"
+    }
+    
+    private static let relativeFormatter: RelativeDateTimeFormatter = {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .full
+        return formatter
+    }()
 }

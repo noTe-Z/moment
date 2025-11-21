@@ -107,7 +107,16 @@ struct RecordingTranscriptSheet: View {
         case .failed:
             let message = recording.transcriptionErrorMessage ?? "转写失败"
             return (message, "exclamationmark.triangle.fill", .orange)
-        case .queued, .idle:
+        case .queued:
+            if recording.hasTranscript {
+                return ("已缓存转写", "text.quote", .secondary)
+            }
+            if recording.isWaitingForScheduledRetry {
+                let text = recording.queuedStatusDescription() ?? "等待自动重试"
+                return (text, "clock.badge.exclamationmark", .orange)
+            }
+            return ("排队等待转写", "hourglass", .secondary)
+        case .idle:
             return recording.hasTranscript ? ("已缓存转写", "text.quote", .secondary) : ("等待转写", "text.badge.plus", .secondary)
         }
     }
