@@ -329,12 +329,28 @@ private struct RecordingRow: View {
     var body: some View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 6) {
-                Text(TimestampFormatter.display(for: recording.timestamp))
-                    .font(.headline)
-                    .foregroundStyle(.primary)
-                Text("时长 \(TimeFormatter.display(for: recording.duration))")
-                    .font(.subheadline)
+                if let title = recording.title, !title.isEmpty {
+                    Text(title)
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                    
+                    HStack(spacing: 4) {
+                        Text(TimestampFormatter.display(for: recording.timestamp))
+                        Text("·")
+                        Text(TimeFormatter.display(for: recording.duration))
+                    }
+                    .font(.caption)
                     .foregroundStyle(.secondary)
+                } else {
+                    Text(TimestampFormatter.display(for: recording.timestamp))
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+                    Text("时长 \(TimeFormatter.display(for: recording.duration))")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                
                 if let status = statusText {
                     Text(status)
                         .font(.caption)

@@ -11,6 +11,8 @@ struct RecordingTranscriptSheet: View {
     @State private var isPolishing = false
     @State private var polishErrorMessage: String?
     @State private var showPolishErrorAlert = false
+    @State private var editingTitleText = ""
+    @FocusState private var isTitleFocused: Bool
     
     private let polishService = OpenAITranscriptPolishService()
     
@@ -27,6 +29,9 @@ struct RecordingTranscriptSheet: View {
                 }
                 .padding(20)
                 .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .onTapGesture {
+                isTitleFocused = false
             }
             .navigationTitle("录音转写")
             .navigationBarTitleDisplayMode(.inline)
@@ -49,6 +54,9 @@ struct RecordingTranscriptSheet: View {
         } message: {
             Text(polishErrorMessage ?? "请稍后再试。")
         }
+        .onAppear {
+            editingTitleText = recording.title ?? ""
+        }
     }
     
     private var metadataSection: some View {
@@ -56,8 +64,29 @@ struct RecordingTranscriptSheet: View {
             Text("录音信息")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
-            Text(TimestampFormatter.display(for: recording.timestamp))
+            
+            // Title Editing Section
+            TextField("输入标题", text: $editingTitleText)
                 .font(.headline)
+                .textFieldStyle(.plain)
+                .focused($isTitleFocused)
+                .submitLabel(.done)
+                .onSubmit {
+                    isTitleFocused = false
+                }
+                .onChange(of: isTitleFocused) { _, focused in
+                    if !focused {
+                        saveTitle()
+                    }
+                }
+            
+            // Timestamp (if title exists, show timestamp as secondary info)
+            if recording.title?.isEmpty == false {
+                Text(TimestampFormatter.display(for: recording.timestamp))
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            
             Text("时长 \(TimeFormatter.display(for: recording.duration))")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
@@ -181,10 +210,13 @@ struct RecordingTranscriptSheet: View {
         isPolishing = true
         Task {
             do {
-                let polished = try await polishService.polish(text: text)
+                let result = try await polishService.polish(text: text)
                 await MainActor.run {
-                    recording.transcriptText = polished
-                    recording.polishedTranscriptText = polished
+                    recording.transcriptText = result.polishedText
+                    recording.polishedTranscriptText = result.polishedText
+                    if recording.title == nil || recording.title?.isEmpty == true {
+                        recording.title = result.title
+                    }
                     recording.transcriptUpdatedAt = Date()
                     try? modelContext.save()
                     isPolishing = false
@@ -197,6 +229,12 @@ struct RecordingTranscriptSheet: View {
                 }
             }
         }
+    }
+    
+    private func saveTitle() {
+        let trimmed = editingTitleText.trimmingCharacters(in: .whitespacesAndNewlines)
+        recording.title = trimmed.isEmpty ? nil : trimmed
+        try? modelContext.save()
     }
 }
 

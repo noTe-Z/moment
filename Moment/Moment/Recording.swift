@@ -7,6 +7,7 @@ final class Recording {
     var timestamp: Date
     var duration: TimeInterval
     var fileName: String
+    var title: String?
     var transcriptText: String?
     var polishedTranscriptText: String?
     var transcriptUpdatedAt: Date?
