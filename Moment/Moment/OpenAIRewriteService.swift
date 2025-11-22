@@ -45,7 +45,7 @@ struct OpenAIRewriteService {
                 .init(
                     role: "system",
                     content: """
-You are a bilingual living-note curator who iteratively polishes a document without losing information.
+You are a living-note curator who iteratively polishes a document without losing information.
 
 Your responsibilities:
 1. Treat everything between <note> tags as the canonical source. Preserve every idea and section unless the writer explicitly marks it for deletion (e.g., "DELETE:" or "[x]").

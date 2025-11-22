@@ -2,7 +2,7 @@ import Foundation
 
 struct PolishResult {
     let polishedText: String
-    let title: String
+    let title: String?
 }
 
 struct OpenAITranscriptPolishService {
@@ -108,12 +108,14 @@ Below is the text to be processed:
             throw PolishError.emptyResult
         }
         
-        return PolishResult(polishedText: json.polished_text, title: json.title)
+        let trimmedTitle = json.title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let normalizedTitle = trimmedTitle.isEmpty ? nil : trimmedTitle
+        return PolishResult(polishedText: json.polished_text, title: normalizedTitle)
     }
 }
 
 private struct PolishResponseJSON: Decodable {
-    let title: String
+    let title: String?
     let polished_text: String
 }
 

@@ -17,6 +17,7 @@ final class RecordingTranscriptionManager: ObservableObject {
     }
     
     private let transcriptionService = AssemblyAITranscriptionService()
+    private let polishService = OpenAITranscriptPolishService()
     private var activeTasks: [UUID: Task<Void, Never>] = [:]
     private var pendingJobs: [QueuedJob] = []
     private var scheduledWakeTask: Task<Void, Never>?
@@ -176,13 +177,45 @@ private extension RecordingTranscriptionManager {
             do {
                 let transcript = try await self.transcriptionService.transcribeAudioFile(at: fileURL)
                 try Task.checkCancellation()
-                await self.handleSuccess(transcript: transcript, polished: nil, recordingID: recordingID, context: context)
+                let trimmedTranscript = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+                var polishResult: PolishResult?
+                
+                if !trimmedTranscript.isEmpty {
+                    let shouldPolish = await MainActor.run {
+                        self.beginAutomaticPolishIfNeeded(recordingID: recordingID, context: context)
+                    }
+                    if shouldPolish {
+                        do {
+                            polishResult = try await self.polishService.polish(text: trimmedTranscript)
+                        } catch {
+                            await MainActor.run {
+                                self.recordPolishFailure(error, recordingID: recordingID, context: context)
+                            }
+                        }
+                    }
+                }
+                
+                await MainActor.run {
+                    self.handleSuccess(
+                        transcript: transcript,
+                        polished: polishResult?.polishedText,
+                        title: polishResult?.title,
+                        recordingID: recordingID,
+                        context: context
+                    )
+                }
             } catch is CancellationError {
-                await self.handleCancellation(recordingID: recordingID, context: context)
+                await MainActor.run {
+                    self.handleCancellation(recordingID: recordingID, context: context)
+                }
             } catch let error as AssemblyAITranscriptionService.TranscriptionError {
-                await self.handleError(error, recordingID: recordingID, context: context)
+                await MainActor.run {
+                    self.handleError(error, recordingID: recordingID, context: context)
+                }
             } catch {
-                await self.handleFailure(recordingID: recordingID, context: context, message: error.localizedDescription)
+                await MainActor.run {
+                    self.handleFailure(recordingID: recordingID, context: context, message: error.localizedDescription)
+                }
             }
             
             await MainActor.run {
@@ -192,10 +225,23 @@ private extension RecordingTranscriptionManager {
         }
     }
     
-    func handleSuccess(transcript: String, polished: String?, recordingID: UUID, context: ModelContext) {
+    func handleSuccess(transcript: String, polished: String?, title: String?, recordingID: UUID, context: ModelContext) {
         guard let recording = fetchRecording(with: recordingID, in: context) else { return }
         recording.transcriptText = transcript
         recording.polishedTranscriptText = polished ?? recording.polishedTranscriptText
+        if polished != nil {
+            recording.polishAttempted = true
+            recording.polishErrorMessage = nil
+        }
+        
+        if let incomingTitle = title?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !incomingTitle.isEmpty {
+            let currentTitle = recording.title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            if currentTitle.isEmpty {
+                recording.title = incomingTitle
+            }
+        }
+        
         recording.transcriptUpdatedAt = Date()
         recording.transcriptionStatus = .completed
         recording.transcriptionErrorMessage = nil
@@ -250,6 +296,26 @@ private extension RecordingTranscriptionManager {
         )
         descriptor.fetchLimit = 1
         return try? context.fetch(descriptor).first
+    }
+    
+    func beginAutomaticPolishIfNeeded(recordingID: UUID, context: ModelContext) -> Bool {
+        guard let recording = fetchRecording(with: recordingID, in: context) else { return false }
+        if recording.hasPolishedTranscript {
+            return false
+        }
+        recording.polishAttempted = true
+        recording.polishErrorMessage = nil
+        try? context.save()
+        return true
+    }
+    
+    func recordPolishFailure(_ error: Error, recordingID: UUID, context: ModelContext) {
+        guard let recording = fetchRecording(with: recordingID, in: context) else { return }
+        #if DEBUG
+        print("OpenAI polish failed for recording \(recordingID): \(error.localizedDescription)")
+        #endif
+        recording.polishErrorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        try? context.save()
     }
     
     func isConcurrencyLimit(_ message: String) -> Bool {

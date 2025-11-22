@@ -10,6 +10,8 @@ final class Recording {
     var title: String?
     var transcriptText: String?
     var polishedTranscriptText: String?
+    var polishAttempted: Bool = false
+    var polishErrorMessage: String?
     var transcriptUpdatedAt: Date?
     var transcriptionErrorMessage: String?
     var transcriptionRequestedAt: Date?
@@ -48,6 +50,10 @@ extension Recording {
         transcriptText?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
     }
     
+    var hasPolishedTranscript: Bool {
+        polishedTranscriptText?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+    }
+    
     var normalizedTranscriptText: String? {
         if let polished = polishedTranscriptText?.trimmingCharacters(in: .whitespacesAndNewlines), !polished.isEmpty {
             return polished
@@ -56,6 +62,10 @@ extension Recording {
             return nil
         }
         return raw
+    }
+    
+    var needsManualPolish: Bool {
+        hasTranscript && !hasPolishedTranscript
     }
     
     var needsAutomaticTranscription: Bool {

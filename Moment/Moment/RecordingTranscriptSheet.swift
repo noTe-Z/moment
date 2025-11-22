@@ -8,10 +8,8 @@ struct RecordingTranscriptSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     
-    @State private var isPolishing = false
-    @State private var polishErrorMessage: String?
-    @State private var showPolishErrorAlert = false
     @State private var editingTitleText = ""
+    @State private var isPolishing = false
     @FocusState private var isTitleFocused: Bool
     
     private let polishService = OpenAITranscriptPolishService()
@@ -49,13 +47,13 @@ struct RecordingTranscriptSheet: View {
                 }
             }
         }
-        .alert("润色失败", isPresented: $showPolishErrorAlert) {
-            Button("好的", role: .cancel) { polishErrorMessage = nil }
-        } message: {
-            Text(polishErrorMessage ?? "请稍后再试。")
-        }
         .onAppear {
             editingTitleText = recording.title ?? ""
+        }
+        .onChange(of: recording.title) { _, newTitle in
+            if !isTitleFocused {
+                editingTitleText = newTitle ?? ""
+            }
         }
     }
     
@@ -97,7 +95,13 @@ struct RecordingTranscriptSheet: View {
                     .foregroundStyle(status.color)
             }
             
-            if shouldShowPolishSection {
+            if hasBeenPolished {
+                Divider().padding(.vertical, 4)
+                
+                Label("文本已润色", systemImage: "wand.and.stars")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            } else if canShowManualPolishControls {
                 Divider().padding(.vertical, 4)
                 
                 if isPolishing {
@@ -107,23 +111,28 @@ struct RecordingTranscriptSheet: View {
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                     }
-                } else if hasBeenPolished {
-                    HStack(spacing: 8) {
-                        Image(systemName: "checkmark.circle.fill")
-                            .foregroundStyle(.green)
-                        Text("已润色")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
                 } else {
                     Button {
                         polishTranscript()
                     } label: {
-                        Label("润色文本", systemImage: "wand.and.stars")
+                        Label(polishButtonLabel, systemImage: "wand.and.stars")
                             .font(.subheadline.bold())
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(Color.accentColor)
+                    .disabled(transcriptText == nil)
+                }
+                
+                if let polishErrorDisplayText {
+                    Text(polishErrorDisplayText)
+                        .font(.footnote)
+                        .foregroundStyle(.red)
+                        .padding(.top, 2)
+                } else if recording.polishAttempted {
+                    Text("若润色未生效，请开启 VPN 后再试。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .padding(.top, 2)
                 }
             }
         }
@@ -143,7 +152,7 @@ struct RecordingTranscriptSheet: View {
                 .foregroundStyle(.secondary)
             
             if let transcriptText {
-                Text(transcriptText)
+                Text(verbatim: transcriptText)
                     .font(.body)
                     .foregroundStyle(.primary)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -193,48 +202,71 @@ struct RecordingTranscriptSheet: View {
     }
     
     private var hasBeenPolished: Bool {
-        recording.polishedTranscriptText?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+        recording.hasPolishedTranscript
     }
     
-    private var shouldShowPolishSection: Bool {
-        recording.transcriptText?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+    private var canShowManualPolishControls: Bool {
+        recording.needsManualPolish
     }
     
-    private func polishTranscript() {
-        guard let text = recording.transcriptText?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty else {
-            polishErrorMessage = "当前没有可润色的转写文本。"
-            showPolishErrorAlert = true
-            return
+    private var polishButtonLabel: String {
+        recording.polishAttempted ? "重新润色" : "润色文本"
+    }
+    
+    private var polishErrorDisplayText: String? {
+        guard let message = recording.polishErrorMessage?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !message.isEmpty else {
+            return nil
         }
-        
-        isPolishing = true
-        Task {
-            do {
-                let result = try await polishService.polish(text: text)
-                await MainActor.run {
-                    recording.transcriptText = result.polishedText
-                    recording.polishedTranscriptText = result.polishedText
-                    if recording.title == nil || recording.title?.isEmpty == true {
-                        recording.title = result.title
-                    }
-                    recording.transcriptUpdatedAt = Date()
-                    try? modelContext.save()
-                    isPolishing = false
-                }
-            } catch {
-                await MainActor.run {
-                    polishErrorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-                    showPolishErrorAlert = true
-                    isPolishing = false
-                }
-            }
-        }
+        return message
     }
     
     private func saveTitle() {
         let trimmed = editingTitleText.trimmingCharacters(in: .whitespacesAndNewlines)
         recording.title = trimmed.isEmpty ? nil : trimmed
         try? modelContext.save()
+    }
+    
+    private func polishTranscript() {
+        guard let rawText = recording.transcriptText?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !rawText.isEmpty else {
+            return
+        }
+        
+        isPolishing = true
+        Task {
+            await MainActor.run {
+                recording.polishAttempted = true
+                recording.polishErrorMessage = nil
+                try? modelContext.save()
+            }
+            
+            do {
+                let result = try await polishService.polish(text: rawText)
+                await MainActor.run {
+                    recording.polishedTranscriptText = result.polishedText
+                    recording.polishErrorMessage = nil
+                    recording.polishAttempted = true
+                    
+                    if let generatedTitle = result.title,
+                       (recording.title?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true) {
+                        recording.title = generatedTitle
+                        editingTitleText = generatedTitle
+                    }
+                    
+                    recording.transcriptUpdatedAt = Date()
+                    try? modelContext.save()
+                    isPolishing = false
+                }
+            } catch {
+                await MainActor.run {
+                    recording.polishAttempted = true
+                    recording.polishErrorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                    try? modelContext.save()
+                    isPolishing = false
+                }
+            }
+        }
     }
 }
 
