@@ -158,9 +158,6 @@ struct RecordingsListView: View {
                         onAddToNote: {
                             recordingForNoteSelection = recording
                         },
-                        onEdit: {
-                            selectedRecordingForEdit = recording
-                        },
                         onViewTranscript: {
                             transcriptViewerRecording = recording
                         },
@@ -265,7 +262,6 @@ private struct RecordingListItem: View {
     let onTogglePlay: () -> Void
     let onDelete: () -> Void
     let onAddToNote: () -> Void
-    let onEdit: () -> Void
     let onViewTranscript: () -> Void
     let onRetryTranscription: () -> Void
     
@@ -296,13 +292,6 @@ private struct RecordingListItem: View {
                 onAddToNote()
             } label: {
                 Label("添加", systemImage: "plus.circle")
-            }
-            .tint(.green)
-            
-            Button {
-                onEdit()
-            } label: {
-                Label("编辑", systemImage: "square.and.pencil")
             }
             .tint(.blue)
         }
@@ -520,15 +509,33 @@ private struct RecordingSummaryRow: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(TimestampFormatter.display(for: recording.timestamp))
-                .font(.headline)
-                .foregroundStyle(.primary)
-            Text("时长 \(TimeFormatter.display(for: recording.duration))")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+            if let title = recordingTitle {
+                Text(title)
+                    .font(.headline)
+                    .foregroundStyle(.primary)
+                    .lineLimit(2)
+                Text("\(TimestampFormatter.display(for: recording.timestamp)) · \(TimeFormatter.display(for: recording.duration))")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            } else {
+                Text(TimestampFormatter.display(for: recording.timestamp))
+                    .font(.headline)
+                    .foregroundStyle(.primary)
+                Text("时长 \(TimeFormatter.display(for: recording.duration))")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, 4)
+    }
+    
+    private var recordingTitle: String? {
+        guard let trimmed = recording.title?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !trimmed.isEmpty else {
+            return nil
+        }
+        return trimmed
     }
 }
 
