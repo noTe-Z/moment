@@ -25,6 +25,10 @@
 		B1F98AF42F8AADFD00DEF123 /* OpenAITranscriptPolishService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1F98AF32F8AADFD00DEF123 /* OpenAITranscriptPolishService.swift */; };
 		B1F98AF12F8AAB1200DEF123 /* RecordingTranscriptionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1F98AF02F8AAB1200DEF123 /* RecordingTranscriptionManager.swift */; };
 		B1F98AF32F8AAB1200DEF123 /* RecordingTranscriptSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1F98AF22F8AAB1200DEF123 /* RecordingTranscriptSheet.swift */; };
+		B2159A112FD2AA1000D11111 /* LiveSpeechRecognizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2159A012FD2AA1000D11111 /* LiveSpeechRecognizer.swift */; };
+		B2159A122FD2AA1000D11111 /* OpenAIRealtimeCoachService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2159A022FD2AA1000D11111 /* OpenAIRealtimeCoachService.swift */; };
+		B2159A132FD2AA1000D11111 /* NarrationCoachViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2159A032FD2AA1000D11111 /* NarrationCoachViewModel.swift */; };
+		B2159A142FD2AA1000D11111 /* NarrationCoachView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2159A042FD2AA1000D11111 /* NarrationCoachView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -50,6 +54,10 @@
 		B1D774A22F4A19C800C7AD9A /* Secrets.local.xcconfig.example */ = {isa = PBXFileReference; lastKnownFileType = text; path = Secrets.local.xcconfig.example; sourceTree = "<group>"; };
 		B1F98AF02F8AAB1200DEF123 /* RecordingTranscriptionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingTranscriptionManager.swift; sourceTree = "<group>"; };
 		B1F98AF22F8AAB1200DEF123 /* RecordingTranscriptSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingTranscriptSheet.swift; sourceTree = "<group>"; };
+		B2159A012FD2AA1000D11111 /* LiveSpeechRecognizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveSpeechRecognizer.swift; sourceTree = "<group>"; };
+		B2159A022FD2AA1000D11111 /* OpenAIRealtimeCoachService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenAIRealtimeCoachService.swift; sourceTree = "<group>"; };
+		B2159A032FD2AA1000D11111 /* NarrationCoachViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NarrationCoachViewModel.swift; sourceTree = "<group>"; };
+		B2159A042FD2AA1000D11111 /* NarrationCoachView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NarrationCoachView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -99,6 +107,10 @@
 				B10D03C72C0E4B8200E4A4BD /* TextEditorRecorderViewModel.swift */,
 				B10D03C92C0E4BA100E4A4BD /* AssemblyAITranscriptionService.swift */,
 				B1A3F7FE2E33A54F00E5E2E3 /* OpenAIRewriteService.swift */,
+				B2159A022FD2AA1000D11111 /* OpenAIRealtimeCoachService.swift */,
+				B2159A032FD2AA1000D11111 /* NarrationCoachViewModel.swift */,
+				B2159A042FD2AA1000D11111 /* NarrationCoachView.swift */,
+				B2159A012FD2AA1000D11111 /* LiveSpeechRecognizer.swift */,
 				B1F98AF32F8AADFD00DEF123 /* OpenAITranscriptPolishService.swift */,
 				1F4C8CA32A8C4D25008B1234 /* Resources */,
 				1F4C8CC52A8C4D25008B1234 /* Info.plist */,
@@ -207,6 +219,10 @@
 				B10D03CA2C0E4BA100E4A4BD /* AssemblyAITranscriptionService.swift in Sources */,
 				B10D03C82C0E4B8200E4A4BD /* TextEditorRecorderViewModel.swift in Sources */,
 				B1A3F7FF2E33A54F00E5E2E3 /* OpenAIRewriteService.swift in Sources */,
+				B2159A122FD2AA1000D11111 /* OpenAIRealtimeCoachService.swift in Sources */,
+				B2159A132FD2AA1000D11111 /* NarrationCoachViewModel.swift in Sources */,
+				B2159A142FD2AA1000D11111 /* NarrationCoachView.swift in Sources */,
+				B2159A112FD2AA1000D11111 /* LiveSpeechRecognizer.swift in Sources */,
 				B1F98AF42F8AADFD00DEF123 /* OpenAITranscriptPolishService.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

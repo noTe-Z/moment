@@ -22,6 +22,8 @@
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>允许录音以保存微表达。</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>为了让口播教练实时给予提示，需要识别你的语音内容。</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

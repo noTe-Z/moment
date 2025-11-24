@@ -1,0 +1,17 @@
+# Instructions
+
+During your interaction with the user, if you find anything reusable in this project (e.g. version of a library, model name), especially about a fix to a mistake you made or a correction you received, you should take note in the `Lessons` section in the `custom-rules.mdc` file so you will not make the same mistake again. 
+
+# Lessons
+
+## User Specified Lessons
+
+## Cursor learned
+- For search results, ensure proper handling of different character encodings (UTF-8) for international queries
+- When searching for recent news, use the current year (2025) instead of previous years, or simply use the "recent" keyword to get the latest information
+- **CRITICAL**: Before delivering code to the user, always verify that the code can build and run successfully using command line tools (e.g., `xcodebuild` for iOS projects). Never deliver code that hasn't been verified to compile successfully.
+- When invoking `xcodebuild` for this project, specify an explicit simulator OS (e.g., `-destination 'platform=iOS Simulator,OS=17.0.1,name=iPhone 15'`) to avoid destination lookup failures.
+- Run any `xcodebuild` commands from `/Users/chenyuan/Development/moment/Moment` because the Xcode project lives in that subdirectory; running from the repo root fails.
+- `navigationDestination(item:)` requires the bound item type to conform to `Hashable`, even if it already conforms to `Identifiable`.
+- Narration Coach integrations must target the `gpt-realtime-mini-2025-10-06` model unless the user requests another.
+- Before shipping realtime-related changes, run a standalone API connectivity test (outside the app) to confirm the specified model responds successfully, using the provided API key.

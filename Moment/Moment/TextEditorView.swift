@@ -29,6 +29,7 @@ struct TextEditorView: View {
     @State private var recorderErrorMessage: String?
     @State private var showRecorderError = false
     @State private var transcriptViewerRecording: Recording?
+    @State private var showNarrationCoach = false
     
     private let transcriptionManager = RecordingTranscriptionManager.shared
     
@@ -143,6 +144,12 @@ struct TextEditorView: View {
         .sheet(item: $transcriptViewerRecording) { recording in
             RecordingTranscriptSheet(recording: recording)
         }
+        .sheet(isPresented: $showNarrationCoach) {
+            NarrationCoachSheet(
+                noteTitle: title,
+                noteContent: content
+            )
+        }
     }
     
     private var mainContent: some View {
@@ -202,6 +209,7 @@ struct TextEditorView: View {
         ToolbarItemGroup(placement: .bottomBar) {
             recorderToolbarButton
             rewriteToolbarButton
+            narrationCoachToolbarButton
             Spacer()
             associatedRecordingToolbarButton
         }
@@ -264,6 +272,35 @@ struct TextEditorView: View {
         .buttonStyle(.plain)
         .disabled(isDisabled)
         .accessibilityLabel("使用 AI 整理当前内容")
+    }
+    
+    private var narrationCoachToolbarButton: some View {
+        Button {
+            showNarrationCoach = true
+        } label: {
+            HStack(alignment: .center, spacing: 12) {
+                Image(systemName: "bubble.left.and.waveform.fill")
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundStyle(Color.accentColor)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("口播教练")
+                        .font(.headline)
+                        .fontWeight(.semibold)
+                    Text("GPT Realtime")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 18)
+            .padding(.vertical, 12)
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(Color(UIColor.secondarySystemBackground))
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("打开口播练习教练")
     }
     
     @ViewBuilder
@@ -576,6 +613,22 @@ struct TextEditorView: View {
             let durationText = TimeFormatter.display(for: recording.duration)
             return "[\(timestampText) · \(durationText)]\n\(transcript)"
         }
+    }
+}
+
+private struct NarrationCoachSheet: View {
+    @StateObject private var viewModel: NarrationCoachViewModel
+    
+    init(noteTitle: String, noteContent: String, onSummaryGenerated: ((String) -> Void)? = nil) {
+        _viewModel = StateObject(wrappedValue: NarrationCoachViewModel(
+            noteTitle: noteTitle,
+            noteContent: noteContent,
+            onSummaryGenerated: onSummaryGenerated
+        ))
+    }
+    
+    var body: some View {
+        NarrationCoachView(viewModel: viewModel)
     }
 }
 
