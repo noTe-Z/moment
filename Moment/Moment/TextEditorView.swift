@@ -30,6 +30,7 @@ struct TextEditorView: View {
     @State private var showRecorderError = false
     @State private var transcriptViewerRecording: Recording?
     @State private var showNarrationCoach = false
+    @State private var includeRecordingsInAIContext = true
     
     private let transcriptionManager = RecordingTranscriptionManager.shared
     
@@ -72,7 +73,8 @@ struct TextEditorView: View {
                     },
                     retryTranscriptionAction: { recording in
                         transcriptionManager.retryTranscription(for: recording, in: modelContext)
-                    }
+                    },
+                    includeRecordingsInAIContext: $includeRecordingsInAIContext
                 )
                 .padding(.horizontal, 16)
                 .padding(.bottom, 12)
@@ -535,6 +537,7 @@ struct TextEditorView: View {
         pendingRewrite = nil
         showRewritePreview = false
         rewriteSourceSnapshot = ""
+        includeRecordingsInAIContext = false
     }
     
     private func dismissRewritePreview() {
@@ -591,7 +594,7 @@ struct TextEditorView: View {
         }
         
         let transcriptBlocks = transcriptContextBlocks()
-        guard !transcriptBlocks.isEmpty else {
+        guard !transcriptBlocks.isEmpty, includeRecordingsInAIContext else {
             return payload.isEmpty ? trimmedContent : payload
         }
         
@@ -676,6 +679,7 @@ private struct RecordingPreviewListPanel: View {
     let playAction: (Recording) -> Void
     let viewTranscriptAction: (Recording) -> Void
     let retryTranscriptionAction: (Recording) -> Void
+    @Binding var includeRecordingsInAIContext: Bool
     
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -684,6 +688,13 @@ private struct RecordingPreviewListPanel: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Spacer()
+                
+                Button(action: { includeRecordingsInAIContext.toggle() }) {
+                    Image(systemName: includeRecordingsInAIContext ? "quote.bubble.fill" : "quote.bubble")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundStyle(includeRecordingsInAIContext ? Color.accentColor : Color.secondary)
+                }
+                .buttonStyle(.plain)
             }
             
             ForEach(recordings) { recording in
