@@ -72,39 +72,82 @@ struct RecordingsListView: View {
     @StateObject private var playbackManager = PlaybackManager()
     @State private var showPlaybackError = false
     @State private var selectedRecordingForEdit: Recording?
-    @State private var recordingForNoteSelection: Recording?
+    @State private var recordingsForNoteSelectionWrapper: RecordingsSheetWrapper?
     @State private var addToNoteNavigationTarget: AddToNoteNavigationTarget?
     private let recordingStore = RecordingStore()
     @State private var transcriptViewerRecording: Recording?
     private let transcriptionManager = RecordingTranscriptionManager.shared
+    
+    // 多选模式状态
+    @State private var isSelectionMode = false
+    @State private var selectedRecordingIDs = Set<UUID>()
 
     var body: some View {
         recordingsList
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(isSelectionMode ? "完成" : "多选") {
+                        isSelectionMode.toggle()
+                        if !isSelectionMode {
+                            selectedRecordingIDs.removeAll()
+                        }
+                    }
+                }
+            }
+            .safeAreaInset(edge: .bottom) {
+                if isSelectionMode {
+                    VStack(spacing: 0) {
+                        Divider()
+                        HStack {
+                            Button {
+                                let selectedRecordings = recordings.filter { selectedRecordingIDs.contains($0.id) }
+                                if !selectedRecordings.isEmpty {
+                                    recordingsForNoteSelectionWrapper = RecordingsSheetWrapper(recordings: selectedRecordings)
+                                }
+                            } label: {
+                                Label("添加到文档", systemImage: "doc.badge.plus")
+                            }
+                            .disabled(selectedRecordingIDs.isEmpty)
+                            
+                            Spacer()
+                            
+                            Text("已选择 \(selectedRecordingIDs.count) 项")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding()
+                        .background(Color(UIColor.systemBackground))
+                    }
+                }
+            }
     }
     
     private var recordingsList: some View {
-        List {
+        List(selection: $selectedRecordingIDs) {
             recordingSections
             if recordings.isEmpty {
                 emptyState
             }
         }
         .listStyle(.insetGrouped)
-        .sheet(item: $recordingForNoteSelection) { recording in
+        .environment(\.editMode, .constant(isSelectionMode ? .active : .inactive))
+        .sheet(item: $recordingsForNoteSelectionWrapper) { wrapper in
             NavigationStack {
-                AddRecordingToNoteSheet(
-                    recording: recording,
+                AddRecordingsToNoteSheet(
+                    recordings: wrapper.recordings,
                     notes: textNotes,
                     selectAction: { note in
-                        recordingForNoteSelection = nil
-                        attachRecording(recording, to: note)
+                        recordingsForNoteSelectionWrapper = nil
+                        attachRecordings(wrapper.recordings, to: note)
                     },
                     createNewAction: {
-                        recordingForNoteSelection = nil
-                        selectedRecordingForEdit = recording
+                        recordingsForNoteSelectionWrapper = nil
+                        // 如果是单个录音，直接跳转到编辑页
+                        // 如果是多个录音，创建新文档并添加所有录音，然后跳转
+                        createNewNoteWithRecordings(wrapper.recordings)
                     },
                     cancelAction: {
-                        recordingForNoteSelection = nil
+                        recordingsForNoteSelectionWrapper = nil
                     }
                 )
             }
@@ -148,7 +191,9 @@ struct RecordingsListView: View {
                         recording: recording,
                         isPlaying: playbackManager.currentlyPlayingID == recording.id,
                         onTogglePlay: {
-                            playbackManager.toggle(recording: recording)
+                            if !isSelectionMode {
+                                playbackManager.toggle(recording: recording)
+                            }
                         },
                         onDelete: {
                             if let index = section.items.firstIndex(where: { $0.id == recording.id }) {
@@ -156,7 +201,7 @@ struct RecordingsListView: View {
                             }
                         },
                         onAddToNote: {
-                            recordingForNoteSelection = recording
+                            recordingsForNoteSelectionWrapper = RecordingsSheetWrapper(recordings: [recording])
                         },
                         onViewTranscript: {
                             transcriptViewerRecording = recording
@@ -165,6 +210,7 @@ struct RecordingsListView: View {
                             transcriptionManager.retryTranscription(for: recording, in: modelContext)
                         }
                     )
+                    .tag(recording.id)
                 }
             }
         }
@@ -200,12 +246,48 @@ struct RecordingsListView: View {
         .sorted(by: { $0.id > $1.id })
     }
     
-    private func attachRecording(_ recording: Recording, to note: TextNote) {
-        note.appendRecordingID(recording.id)
+    private func attachRecordings(_ recordings: [Recording], to note: TextNote) {
+        for recording in recordings {
+            note.appendRecordingID(recording.id)
+            transcriptionManager.ensureTranscript(for: recording, in: modelContext)
+        }
         note.updatedAt = Date()
         try? modelContext.save()
-        transcriptionManager.ensureTranscript(for: recording, in: modelContext)
-        addToNoteNavigationTarget = AddToNoteNavigationTarget(note: note, recording: recording)
+        
+        if let firstRecording = recordings.first {
+            addToNoteNavigationTarget = AddToNoteNavigationTarget(note: note, recording: firstRecording)
+        }
+        
+        // 退出选择模式
+        isSelectionMode = false
+        selectedRecordingIDs.removeAll()
+    }
+    
+    private func createNewNoteWithRecordings(_ recordings: [Recording]) {
+        guard let firstRecording = recordings.first else { return }
+        
+        if recordings.count == 1 {
+            selectedRecordingForEdit = firstRecording
+        } else {
+            // 创建新文档
+            let newNote = TextNote(
+                title: "新结构化表达", // 或者使用日期等
+                content: "",
+                recordingIDs: recordings.map(\.id)
+            )
+            modelContext.insert(newNote)
+            try? modelContext.save()
+            
+            for recording in recordings {
+                transcriptionManager.ensureTranscript(for: recording, in: modelContext)
+            }
+            
+            addToNoteNavigationTarget = AddToNoteNavigationTarget(note: newNote, recording: firstRecording)
+        }
+        
+        // 退出选择模式
+        isSelectionMode = false
+        selectedRecordingIDs.removeAll()
     }
     
     private func deleteRecordings(at offsets: IndexSet, in sectionItems: [Recording]) {
@@ -234,6 +316,11 @@ struct RecordingsListView: View {
     }
 }
 
+struct RecordingsSheetWrapper: Identifiable {
+    let id = UUID()
+    let recordings: [Recording]
+}
+
 private struct RecordingSection: Identifiable {
     let id: Date
     let title: String
@@ -257,6 +344,7 @@ private struct AddToNoteNavigationTarget: Identifiable, Hashable {
 }
 
 private struct RecordingListItem: View {
+    @Environment(\.editMode) private var editMode
     let recording: Recording
     let isPlaying: Bool
     let onTogglePlay: () -> Void
@@ -274,6 +362,7 @@ private struct RecordingListItem: View {
         )
         .contentShape(Rectangle())
         .onTapGesture {
+            if editMode?.wrappedValue.isEditing == true { return }
             onTogglePlay()
         }
         .listRowBackground(
@@ -441,8 +530,8 @@ private struct RecordingRow: View {
     }
 }
 
-private struct AddRecordingToNoteSheet: View {
-    let recording: Recording
+private struct AddRecordingsToNoteSheet: View {
+    let recordings: [Recording]
     let notes: [TextNote]
     let selectAction: (TextNote) -> Void
     let createNewAction: () -> Void
@@ -451,8 +540,22 @@ private struct AddRecordingToNoteSheet: View {
     var body: some View {
         List {
             Section("当前录音") {
-                RecordingSummaryRow(recording: recording)
-                Text("选择一个文本文档，将该录音展示在文本编辑页的关联面板中。")
+                if recordings.count == 1, let recording = recordings.first {
+                    RecordingSummaryRow(recording: recording)
+                } else {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("已选择 \(recordings.count) 条录音")
+                            .font(.headline)
+                        Text("时长合计 \(TimeFormatter.display(for: recordings.reduce(0) { $0 + $1.duration }))")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.vertical, 4)
+                }
+                
+                Text(recordings.count > 1
+                     ? "选择一个文本文档，将这些录音展示在文本编辑页的关联面板中。"
+                     : "选择一个文本文档，将该录音展示在文本编辑页的关联面板中。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .padding(.top, 4)
@@ -469,7 +572,7 @@ private struct AddRecordingToNoteSheet: View {
                         } label: {
                             NoteSelectionRow(
                                 note: note,
-                                isLinkedToCurrentRecording: note.allRecordingIDs.contains(recording.id),
+                                isLinkedToRecordings: isLinked(to: note),
                                 totalLinkedCount: note.allRecordingIDs.count
                             )
                         }
@@ -501,6 +604,16 @@ private struct AddRecordingToNoteSheet: View {
                 }
             }
         }
+    }
+    
+    private func isLinked(to note: TextNote) -> Bool {
+        // 检查是否所有选中的录音都已经关联到了该笔记
+        for recording in recordings {
+            if !note.allRecordingIDs.contains(recording.id) {
+                return false
+            }
+        }
+        return true
     }
 }
 
@@ -541,7 +654,7 @@ private struct RecordingSummaryRow: View {
 
 private struct NoteSelectionRow: View {
     let note: TextNote
-    let isLinkedToCurrentRecording: Bool
+    let isLinkedToRecordings: Bool
     let totalLinkedCount: Int
     
     var body: some View {
@@ -554,7 +667,7 @@ private struct NoteSelectionRow: View {
                 
                 Spacer()
                 
-                if isLinkedToCurrentRecording {
+                if isLinkedToRecordings {
                     AttachmentStatusTag(
                         text: "已关联",
                         background: Color.accentColor.opacity(0.15),

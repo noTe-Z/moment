@@ -74,6 +74,9 @@ struct TextEditorView: View {
                     retryTranscriptionAction: { recording in
                         transcriptionManager.retryTranscription(for: recording, in: modelContext)
                     },
+                    unbindAction: { recording in
+                        unbindRecording(recording)
+                    },
                     includeRecordingsInAIContext: $includeRecordingsInAIContext
                 )
                 .padding(.horizontal, 16)
@@ -460,6 +463,29 @@ struct TextEditorView: View {
         recorderViewModel.markFallbackRecordingHandled()
     }
     
+    private func unbindRecording(_ recording: Recording) {
+        withAnimation {
+            if let index = associatedRecordings.firstIndex(where: { $0.id == recording.id }) {
+                associatedRecordings.remove(at: index)
+            }
+            
+            if let existingNote {
+                var ids = existingNote.allRecordingIDs
+                ids.removeAll(where: { $0 == recording.id })
+                existingNote.setRecordingIDs(ids)
+                try? modelContext.save()
+            }
+            
+            if highlightedRecordingID == recording.id {
+                highlightedRecordingID = associatedRecordings.first?.id
+            }
+            
+            if associatedRecordings.isEmpty {
+                showRecordingPanel = false
+            }
+        }
+    }
+    
     private func handleRecorderButtonTapped() {
         Task { @MainActor in
             switch recorderViewModel.mode {
@@ -679,10 +705,11 @@ private struct RecordingPreviewListPanel: View {
     let playAction: (Recording) -> Void
     let viewTranscriptAction: (Recording) -> Void
     let retryTranscriptionAction: (Recording) -> Void
+    let unbindAction: (Recording) -> Void
     @Binding var includeRecordingsInAIContext: Bool
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Text("关联录音 (\(recordings.count))")
                     .font(.caption)
@@ -696,20 +723,36 @@ private struct RecordingPreviewListPanel: View {
                 }
                 .buttonStyle(.plain)
             }
+            .padding(16)
             
-            ForEach(recordings) { recording in
-                RecordingPreviewRow(
-                    recording: recording,
-                    isHighlighted: highlightedRecordingID == recording.id,
-                    isPlaying: currentlyPlayingID == recording.id,
-                    playAction: { playAction(recording) },
-                    viewTranscriptAction: { viewTranscriptAction(recording) },
-                    retryTranscriptionAction: { retryTranscriptionAction(recording) }
-                )
+            // 使用 List 实现左滑删除，并限制高度
+            List {
+                ForEach(recordings) { recording in
+                    RecordingPreviewRow(
+                        recording: recording,
+                        isHighlighted: highlightedRecordingID == recording.id,
+                        isPlaying: currentlyPlayingID == recording.id,
+                        playAction: { playAction(recording) },
+                        viewTranscriptAction: { viewTranscriptAction(recording) },
+                        retryTranscriptionAction: { retryTranscriptionAction(recording) }
+                    )
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+                    .listRowSeparator(.hidden)
+                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                        Button(role: .destructive) {
+                            unbindAction(recording)
+                        } label: {
+                            Label("解绑", systemImage: "link.badge.minus")
+                        }
+                    }
+                }
             }
+            .listStyle(.plain)
+            .scrollContentBackground(.hidden)
+            // 动态高度限制：每行约 80pt + padding，最大高度 320pt
+            .frame(height: min(CGFloat(recordings.count * 90), 320))
         }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .fill(.thinMaterial)
@@ -729,12 +772,23 @@ private struct RecordingPreviewRow: View {
     var body: some View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 6) {
-                Text(TimestampFormatter.display(for: recording.timestamp))
-                    .font(.headline)
-                    .foregroundStyle(.primary)
-                Text("时长 \(TimeFormatter.display(for: recording.duration))")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                if let title = recordingTitle {
+                    Text(title)
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                    
+                    Text("\(TimestampFormatter.display(for: recording.timestamp)) · \(TimeFormatter.display(for: recording.duration))")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text(TimestampFormatter.display(for: recording.timestamp))
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+                    Text("时长 \(TimeFormatter.display(for: recording.duration))")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
                 
                 if let status = statusText {
                     Text(status)
@@ -754,26 +808,24 @@ private struct RecordingPreviewRow: View {
             }
             .buttonStyle(.plain)
         }
-        .padding(16)
+        .padding(12)
         .background(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .fill(
                     isHighlighted
                     ? Color.accentColor.opacity(0.12)
                     : Color(UIColor.secondarySystemBackground)
                 )
         )
-        .contextMenu {
-            Button("查看转写") {
-                viewTranscriptAction()
-            }
-            .disabled(!recording.hasTranscript)
-            
-            Button("重新转写") {
-                retryTranscriptionAction()
-            }
-            .disabled(!recording.canManualRetryTranscription)
+        .contentShape(Rectangle()) // 确保点击区域正确
+    }
+    
+    private var recordingTitle: String? {
+        guard let trimmed = recording.title?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !trimmed.isEmpty else {
+            return nil
         }
+        return trimmed
     }
     
     @ViewBuilder
