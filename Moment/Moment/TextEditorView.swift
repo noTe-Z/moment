@@ -176,13 +176,6 @@ struct TextEditorView: View {
             
             Divider()
             
-            if !hasMainThreadHeading {
-                MainThreadHintView(insertAction: insertMainThreadHeading)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
-                    .transition(.opacity.combined(with: .move(edge: .top)))
-            }
-            
             // 内容输入区
             ZStack(alignment: .topLeading) {
                 TextEditor(text: $content)
