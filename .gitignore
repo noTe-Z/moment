@@ -86,3 +86,6 @@ docs/app_images/
 Moment/Moment/Config/Secrets.local.xcconfig
 **/*.local.xcconfig
 
+# AI Automation Scripts
+scripts/update_prd.py
+smart_push.sh

@@ -77,13 +77,24 @@ struct RecordingsListView: View {
     private let recordingStore = RecordingStore()
     @State private var transcriptViewerRecording: Recording?
     private let transcriptionManager = RecordingTranscriptionManager.shared
+    private let insightsService = RecordingInsightsService()
     
     // 多选模式状态
     @State private var isSelectionMode = false
     @State private var selectedRecordingIDs = Set<UUID>()
+    @State private var isRequestingInsights = false
+    @State private var insightsAlert: InsightsAlertItem?
+    @State private var insightsResult: RecordingInsightsDisplayResult?
+    @State private var quickSelectContext: QuickSelectOption?
+    @State private var isApplyingQuickSelect = false
 
     var body: some View {
-        recordingsList
+        VStack(spacing: 0) {
+            if isSelectionMode {
+                quickSelectBar
+            }
+            recordingsList
+        }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(isSelectionMode ? "完成" : "多选") {
@@ -98,27 +109,21 @@ struct RecordingsListView: View {
                 if isSelectionMode {
                     VStack(spacing: 0) {
                         Divider()
-                        HStack {
-                            Button {
-                                let selectedRecordings = recordings.filter { selectedRecordingIDs.contains($0.id) }
-                                if !selectedRecordings.isEmpty {
-                                    recordingsForNoteSelectionWrapper = RecordingsSheetWrapper(recordings: selectedRecordings)
-                                }
-                            } label: {
-                                Label("添加到文档", systemImage: "doc.badge.plus")
-                            }
-                            .disabled(selectedRecordingIDs.isEmpty)
-                            
-                            Spacer()
-                            
-                            Text("已选择 \(selectedRecordingIDs.count) 项")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        .padding()
-                        .background(Color(UIColor.systemBackground))
+                        selectionToolbar
                     }
                 }
+            }
+            .sheet(item: $insightsResult) { result in
+                RecordingInsightsSheet(result: result) {
+                    insightsResult = nil
+                }
+            }
+            .alert(item: $insightsAlert) { alert in
+                Alert(
+                    title: Text(alert.title),
+                    message: Text(alert.message),
+                    dismissButton: .default(Text("好的"))
+                )
             }
     }
     
@@ -180,6 +185,117 @@ struct RecordingsListView: View {
         .onChange(of: recordings.map(\.id)) { _ in
             ensureTranscriptions()
         }
+        .onChange(of: selectedRecordingIDs) { _ in
+            handleSelectionChange()
+        }
+    }
+
+    private var selectionToolbar: some View {
+        VStack(spacing: 12) {
+            HStack(spacing: 12) {
+                addToDocumentButton
+                insightsButton
+            }
+            
+            selectionSummaryView
+        }
+        .padding()
+        .background(Color(UIColor.systemBackground))
+    }
+    
+    private var addToDocumentButton: some View {
+        Button {
+            presentAddToDocumentSheet()
+        } label: {
+            Label("添加到文档", systemImage: "doc.badge.plus")
+                .font(.headline)
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.bordered)
+        .disabled(selectedRecordingIDs.isEmpty)
+    }
+    
+    private var insightsButton: some View {
+        Button {
+            requestInsights()
+        } label: {
+            if isRequestingInsights {
+                HStack(spacing: 8) {
+                    ProgressView()
+                    Text("分析中…")
+                }
+                .frame(maxWidth: .infinity)
+            } else {
+                Label("AI 洞察", systemImage: "sparkles")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+            }
+        }
+        .buttonStyle(.borderedProminent)
+        .disabled(!canTriggerInsights)
+    }
+    
+    private var selectionSummaryView: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(selectionSummaryText)
+                .font(.subheadline)
+                .fontWeight(.medium)
+                .foregroundStyle(.primary)
+            
+            if let detail = selectionDetailText {
+                Text(detail)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+    
+    private var selectionSummaryText: String {
+        if let context = quickSelectContext {
+            return "\(context.displayName) · 已选择 \(selectedRecordingIDs.count) 项"
+        }
+        return "已选择 \(selectedRecordingIDs.count) 项"
+    }
+    
+    private var selectionDetailText: String? {
+        guard !selectedRecordingIDs.isEmpty else { return nil }
+        let analyzable = analyzableRecordings.count
+        if analyzable == selectedRecordingIDs.count {
+            return "所有录音均已完成转录，可供 AI 分析。"
+        } else {
+            return "其中 \(analyzable) 条已有精校转录，可供 AI 分析。"
+        }
+    }
+    
+    private var canTriggerInsights: Bool {
+        !selectedRecordingIDs.isEmpty && !isRequestingInsights
+    }
+    
+    private var quickSelectBar: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 10) {
+                ForEach(QuickSelectOption.allCases) { option in
+                    Button {
+                        applyQuickSelect(option)
+                    } label: {
+                        Text(option.displayName)
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 8)
+                            .background(quickSelectContext == option ? Color.accentColor.opacity(0.15) : Color(UIColor.secondarySystemBackground))
+                            .foregroundStyle(quickSelectContext == option ? Color.accentColor : Color.primary)
+                            .clipShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(quickSelectIDs(for: option).isEmpty)
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+        }
+        .background(Color(UIColor.systemBackground))
     }
 
     @ViewBuilder
@@ -325,6 +441,149 @@ private struct RecordingSection: Identifiable {
     let id: Date
     let title: String
     let items: [Recording]
+}
+
+private struct InsightsAlertItem: Identifiable {
+    let id = UUID()
+    let title: String
+    let message: String
+}
+
+private enum QuickSelectOption: CaseIterable, Identifiable, Equatable {
+    case thisWeek
+    
+    var id: Self { self }
+    
+    var displayName: String {
+        switch self {
+        case .thisWeek:
+            return "本周"
+        }
+    }
+    
+    var timeframeDescription: String {
+        switch self {
+        case .thisWeek:
+            return "本周"
+        }
+    }
+}
+
+private extension RecordingsListView {
+    var selectedRecordings: [Recording] {
+        recordings.filter { selectedRecordingIDs.contains($0.id) }
+    }
+    
+    var analyzableRecordings: [Recording] {
+        selectedRecordings.filter { $0.normalizedTranscriptText != nil }
+    }
+    
+    func handleSelectionChange() {
+        guard !isApplyingQuickSelect else { return }
+        guard let context = quickSelectContext else {
+            if selectedRecordingIDs.isEmpty {
+                quickSelectContext = nil
+            }
+            return
+        }
+        
+        if quickSelectIDs(for: context) != selectedRecordingIDs {
+            quickSelectContext = nil
+        }
+    }
+    
+    func presentAddToDocumentSheet() {
+        let selection = selectedRecordings
+        guard !selection.isEmpty else { return }
+        recordingsForNoteSelectionWrapper = RecordingsSheetWrapper(recordings: selection)
+    }
+    
+    func requestInsights() {
+        guard !isRequestingInsights else { return }
+        
+        let selection = selectedRecordings
+        guard !selection.isEmpty else {
+            insightsAlert = InsightsAlertItem(
+                title: "请选择录音",
+                message: "在触发 AI 洞察前，请先选择至少一条录音。"
+            )
+            return
+        }
+        
+        let payloadEntries = selection.compactMap { RecordingInsightsPayload.Entry(recording: $0) }
+        guard !payloadEntries.isEmpty else {
+            insightsAlert = InsightsAlertItem(
+                title: "暂无可分析内容",
+                message: "这些录音还没有完成精校转录，无法进行 AI 分析。"
+            )
+            return
+        }
+        
+        isRequestingInsights = true
+        let contextDescription = quickSelectContext?.timeframeDescription
+        let payload = RecordingInsightsPayload(recordings: payloadEntries)
+        
+        Task {
+            do {
+                let response = try await insightsService.generateInsights(using: payload)
+                let displayResult = RecordingInsightsDisplayResult(
+                    summary: response.summary,
+                    clusters: response.clusters,
+                    additionalInsights: response.additionalInsights,
+                    analyzedCount: payload.recordings.count,
+                    totalSelectedCount: selection.count,
+                    timeframeDescription: contextDescription
+                )
+                await MainActor.run {
+                    insightsResult = displayResult
+                    isRequestingInsights = false
+                }
+            } catch {
+                await MainActor.run {
+                    insightsAlert = InsightsAlertItem(
+                        title: "生成洞察失败",
+                        message: error.localizedDescription
+                    )
+                    isRequestingInsights = false
+                }
+            }
+        }
+    }
+    
+    func applyQuickSelect(_ option: QuickSelectOption) {
+        let ids = quickSelectIDs(for: option)
+        guard !ids.isEmpty else {
+            insightsAlert = InsightsAlertItem(
+                title: "暂无可选录音",
+                message: "当前时间范围内没有可供选择的录音。"
+            )
+            return
+        }
+        
+        isSelectionMode = true
+        isApplyingQuickSelect = true
+        selectedRecordingIDs = ids
+        quickSelectContext = option
+        DispatchQueue.main.async {
+            isApplyingQuickSelect = false
+        }
+    }
+    
+    func quickSelectIDs(for option: QuickSelectOption) -> Set<UUID> {
+        guard let interval = quickSelectDateInterval(for: option) else { return [] }
+        let ids = recordings
+            .filter { interval.contains($0.timestamp) }
+            .map(\.id)
+        return Set(ids)
+    }
+    
+    func quickSelectDateInterval(for option: QuickSelectOption) -> DateInterval? {
+        let calendar = Calendar.current
+        switch option {
+        case .thisWeek:
+            return calendar.dateInterval(of: .weekOfYear, for: Date())
+        }
+    }
 }
 
 private struct AddToNoteNavigationTarget: Identifiable, Hashable {

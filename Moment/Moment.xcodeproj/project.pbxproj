@@ -29,6 +29,9 @@
 		B2159A122FD2AA1000D11111 /* OpenAIRealtimeCoachService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2159A022FD2AA1000D11111 /* OpenAIRealtimeCoachService.swift */; };
 		B2159A132FD2AA1000D11111 /* NarrationCoachViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2159A032FD2AA1000D11111 /* NarrationCoachViewModel.swift */; };
 		B2159A142FD2AA1000D11111 /* NarrationCoachView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2159A042FD2AA1000D11111 /* NarrationCoachView.swift */; };
+		B2F70A322FC5B10000EEABCD /* RecordingInsightsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2F70A312FC5B10000EEABCD /* RecordingInsightsService.swift */; };
+		B2F70A342FC5B10000EEABCD /* RecordingInsightsModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2F70A332FC5B10000EEABCD /* RecordingInsightsModels.swift */; };
+		B2F70A362FC5B10000EEABCD /* RecordingInsightsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2F70A352FC5B10000EEABCD /* RecordingInsightsSheet.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -58,6 +61,9 @@
 		B2159A022FD2AA1000D11111 /* OpenAIRealtimeCoachService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenAIRealtimeCoachService.swift; sourceTree = "<group>"; };
 		B2159A032FD2AA1000D11111 /* NarrationCoachViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NarrationCoachViewModel.swift; sourceTree = "<group>"; };
 		B2159A042FD2AA1000D11111 /* NarrationCoachView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NarrationCoachView.swift; sourceTree = "<group>"; };
+		B2F70A312FC5B10000EEABCD /* RecordingInsightsService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingInsightsService.swift; sourceTree = "<group>"; };
+		B2F70A332FC5B10000EEABCD /* RecordingInsightsModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingInsightsModels.swift; sourceTree = "<group>"; };
+		B2F70A352FC5B10000EEABCD /* RecordingInsightsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingInsightsSheet.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -112,6 +118,9 @@
 				B2159A042FD2AA1000D11111 /* NarrationCoachView.swift */,
 				B2159A012FD2AA1000D11111 /* LiveSpeechRecognizer.swift */,
 				B1F98AF32F8AADFD00DEF123 /* OpenAITranscriptPolishService.swift */,
+				B2F70A352FC5B10000EEABCD /* RecordingInsightsSheet.swift */,
+				B2F70A332FC5B10000EEABCD /* RecordingInsightsModels.swift */,
+				B2F70A312FC5B10000EEABCD /* RecordingInsightsService.swift */,
 				1F4C8CA32A8C4D25008B1234 /* Resources */,
 				1F4C8CC52A8C4D25008B1234 /* Info.plist */,
 			);
@@ -224,6 +233,9 @@
 				B2159A142FD2AA1000D11111 /* NarrationCoachView.swift in Sources */,
 				B2159A112FD2AA1000D11111 /* LiveSpeechRecognizer.swift in Sources */,
 				B1F98AF42F8AADFD00DEF123 /* OpenAITranscriptPolishService.swift in Sources */,
+				B2F70A362FC5B10000EEABCD /* RecordingInsightsSheet.swift in Sources */,
+				B2F70A342FC5B10000EEABCD /* RecordingInsightsModels.swift in Sources */,
+				B2F70A322FC5B10000EEABCD /* RecordingInsightsService.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
