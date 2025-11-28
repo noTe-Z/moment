@@ -6,6 +6,8 @@ import UIKit
 struct RecordingInsightsSheet: View {
     let result: RecordingInsightsDisplayResult
     let dismissAction: () -> Void
+    let saveAction: (RecordingInsightsDisplayResult) -> Void
+    let clusterSelectionAction: (RecordingInsightsCluster, RecordingInsightsDisplayResult) -> Void
     
     @State private var showCopyToast = false
     
@@ -13,7 +15,7 @@ struct RecordingInsightsSheet: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
-                    summarySection
+                    narrativeSection
                     
                     if !result.clusters.isEmpty {
                         clustersSection
@@ -45,6 +47,9 @@ struct RecordingInsightsSheet: View {
                     }
                 }
             }
+            .safeAreaInset(edge: .bottom) {
+                saveButton
+            }
             .overlay(alignment: .bottom) {
                 if showCopyToast {
                     copyToast
@@ -53,12 +58,19 @@ struct RecordingInsightsSheet: View {
         }
     }
     
-    private var summarySection: some View {
-        SectionCard(title: "整体总结") {
-            Text(result.summary)
-                .font(.body)
-                .foregroundStyle(.primary)
-                .frame(maxWidth: .infinity, alignment: .leading)
+    private var narrativeSection: some View {
+        SectionCard(title: "叙述总结") {
+            VStack(alignment: .leading, spacing: 12) {
+                Text(result.narrative)
+                    .font(.body)
+                    .foregroundStyle(.primary)
+                    .lineSpacing(6)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                
+                if let reflection = result.reflectionPrompt, !reflection.isEmpty {
+                    ReflectionTag(text: reflection)
+                }
+            }
         }
     }
     
@@ -70,34 +82,12 @@ struct RecordingInsightsSheet: View {
             
             VStack(spacing: 12) {
                 ForEach(result.clusters) { cluster in
-                    SectionCard(title: cluster.title) {
-                        VStack(alignment: .leading, spacing: 8) {
-                            if let summary = cluster.summary, !summary.isEmpty {
-                                Text(summary)
-                                    .foregroundStyle(.primary)
-                            }
-                            
-                            if let keyPoints = cluster.keyPoints, !keyPoints.isEmpty {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    ForEach(keyPoints, id: \.self) { point in
-                                        HStack(alignment: .top, spacing: 6) {
-                                            Text("•")
-                                            Text(point)
-                                                .frame(maxWidth: .infinity, alignment: .leading)
-                                        }
-                                        .font(.subheadline)
-                                        .foregroundStyle(.primary)
-                                    }
-                                }
-                            }
-                            
-                            if let emotions = cluster.sharedEmotions, !emotions.isEmpty {
-                                Text("情绪：\(emotions.joined(separator: "、"))")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
+                    Button {
+                        clusterSelectionAction(cluster, result)
+                    } label: {
+                        ClusterCard(cluster: cluster)
                     }
+                    .buttonStyle(.plain)
                 }
             }
         }
@@ -148,6 +138,24 @@ struct RecordingInsightsSheet: View {
         .font(.subheadline)
     }
     
+    private var saveButton: some View {
+        HStack {
+            Spacer()
+            Button {
+                saveAction(result)
+            } label: {
+                Label("保存到文本子页", systemImage: "doc.badge.plus")
+                    .font(.subheadline.weight(.semibold))
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .tint(.accentColor.opacity(0.7))
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 10)
+        .background(.ultraThinMaterial)
+    }
+    
     private var copyToast: some View {
         Text("已复制到剪贴板")
             .font(.footnote)
@@ -177,21 +185,24 @@ struct RecordingInsightsSheet: View {
     
     private var insightsTextForCopy: String {
         var segments: [String] = []
-        segments.append("【整体总结】\n\(result.summary)")
+        segments.append("【叙述总结】\n\(result.narrative)")
+        
+        if let reflection = result.reflectionPrompt, !reflection.isEmpty {
+            segments.append("【反思提示】\n\(reflection)")
+        }
         
         if !result.clusters.isEmpty {
             segments.append("【聚类洞察】")
             for cluster in result.clusters {
                 var clusterLines: [String] = []
                 clusterLines.append("〈\(cluster.title)〉")
-                if let summary = cluster.summary {
-                    clusterLines.append(summary)
+                clusterLines.append(cluster.highlight)
+                if let detail = cluster.detail {
+                    clusterLines.append(detail)
                 }
-                if let keyPoints = cluster.keyPoints {
-                    keyPoints.forEach { clusterLines.append("- \($0)") }
-                }
-                if let emotions = cluster.sharedEmotions, !emotions.isEmpty {
-                    clusterLines.append("情绪：\(emotions.joined(separator: "、"))")
+                if !cluster.recordingIDs.isEmpty {
+                    let joinedIDs = cluster.recordingIDs.map { $0.uuidString }.joined(separator: ", ")
+                    clusterLines.append("关联录音：\(joinedIDs)")
                 }
                 segments.append(clusterLines.joined(separator: "\n"))
             }
@@ -233,3 +244,72 @@ private struct SectionCard<Content: View>: View {
     }
 }
 
+private struct ReflectionTag: View {
+    let text: String
+    
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "sparkles")
+                .font(.footnote)
+            Text(text)
+                .font(.footnote)
+                .multilineTextAlignment(.leading)
+        }
+        .padding(.vertical, 6)
+        .padding(.horizontal, 10)
+        .background(
+            Capsule()
+                .fill(Color.accentColor.opacity(0.12))
+        )
+        .foregroundStyle(Color.accentColor)
+    }
+}
+
+private struct ClusterCard: View {
+    let cluster: RecordingInsightsCluster
+    
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(cluster.title)
+                    .font(.headline)
+                    .foregroundStyle(.primary)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+                
+                Text(cluster.highlight)
+                    .font(.subheadline)
+                    .foregroundStyle(.primary)
+                    .lineSpacing(4)
+                    .fixedSize(horizontal: false, vertical: true)
+                
+                if let detail = cluster.detail {
+                    Text(detail)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .lineSpacing(3)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                
+                if !cluster.recordingIDs.isEmpty {
+                    Text("关联录音 \(cluster.recordingIDs.count)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .padding(.top, 2)
+                }
+            }
+            
+            Spacer(minLength: 8)
+            
+            Image(systemName: "chevron.right")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.tertiary)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(Color(UIColor.secondarySystemBackground))
+        )
+    }
+}

@@ -87,6 +87,12 @@ struct RecordingsListView: View {
     @State private var insightsResult: RecordingInsightsDisplayResult?
     @State private var quickSelectContext: QuickSelectOption?
     @State private var isApplyingQuickSelect = false
+    @State private var clusterSaveContext: ClusterSaveContext?
+    @State private var isPersistingInsights = false
+    @State private var savedInsightsNotes = [UUID: TextNote]()
+    @State private var insightsNoteNavigationTarget: TextNote?
+    @State private var pendingSavePrompt: RecordingInsightsDisplayResult?
+    @State private var isSavePromptPresented = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -114,9 +120,18 @@ struct RecordingsListView: View {
                 }
             }
             .sheet(item: $insightsResult) { result in
-                RecordingInsightsSheet(result: result) {
-                    insightsResult = nil
-                }
+                RecordingInsightsSheet(
+                    result: result,
+                    dismissAction: {
+                        handleInsightsDismiss(for: result)
+                    },
+                    saveAction: { displayResult in
+                        startInsightsSaveFlow(for: displayResult)
+                    },
+                    clusterSelectionAction: { cluster, displayResult in
+                        handleClusterSelection(cluster, displayResult: displayResult)
+                    }
+                )
             }
             .alert(item: $insightsAlert) { alert in
                 Alert(
@@ -125,6 +140,25 @@ struct RecordingsListView: View {
                     dismissButton: .default(Text("好的"))
                 )
             }
+            .confirmationDialog(
+                "保存本次 AI 洞察？",
+                isPresented: $isSavePromptPresented,
+                presenting: pendingSavePrompt,
+                actions: { pending in
+                    Button("保存到文本子页") {
+                        isSavePromptPresented = false
+                        pendingSavePrompt = nil
+                        startInsightsSaveFlow(for: pending)
+                    }
+                    Button("暂不保存", role: .cancel) {
+                        isSavePromptPresented = false
+                        pendingSavePrompt = nil
+                    }
+                },
+                message: { _ in
+                Text("稍后也可以重新生成洞察，或立即保存到文本文档。")
+                }
+            )
     }
     
     private var recordingsList: some View {
@@ -160,11 +194,41 @@ struct RecordingsListView: View {
         .sheet(item: $transcriptViewerRecording) { recording in
             RecordingTranscriptSheet(recording: recording)
         }
+        .sheet(item: $clusterSaveContext) { context in
+            NavigationStack {
+                ClusterAssociationSheet(
+                    context: context,
+                    notes: textNotes,
+                    isSaving: isPersistingInsights,
+                    selectAction: { note in
+                        persistCluster(
+                            context.cluster,
+                            from: context.result,
+                            into: note,
+                            replaceExistingContent: false
+                        )
+                    },
+                    createAction: {
+                        createNewClusterNote(from: context.cluster, result: context.result)
+                    },
+                    saveFullAction: {
+                        clusterSaveContext = nil
+                        saveEntireInsightsDirectly(for: context.result)
+                    },
+                    cancelAction: {
+                        cancelClusterSaveFlow(for: context.result)
+                    }
+                )
+            }
+        }
         .navigationDestination(item: $selectedRecordingForEdit) { recording in
             TextEditorView(recording: recording)
         }
         .navigationDestination(item: $addToNoteNavigationTarget) { target in
             TextEditorView(recording: target.recording, existingNote: target.note)
+        }
+        .navigationDestination(item: $insightsNoteNavigationTarget) { note in
+            TextEditorView(existingNote: note)
         }
         .onChange(of: playbackManager.errorMessage) { newValue in
             showPlaybackError = newValue != nil
@@ -527,7 +591,8 @@ private extension RecordingsListView {
             do {
                 let response = try await insightsService.generateInsights(using: payload)
                 let displayResult = RecordingInsightsDisplayResult(
-                    summary: response.summary,
+                    narrative: response.narrative,
+                    reflectionPrompt: response.reflectionPrompt,
                     clusters: response.clusters,
                     additionalInsights: response.additionalInsights,
                     analyzedCount: payload.recordings.count,
@@ -548,6 +613,245 @@ private extension RecordingsListView {
                 }
             }
         }
+    }
+    
+    func startInsightsSaveFlow(for result: RecordingInsightsDisplayResult) {
+        saveEntireInsightsDirectly(for: result)
+    }
+    
+    func handleInsightsDismiss(for result: RecordingInsightsDisplayResult) {
+        insightsResult = nil
+        if savedInsightsNotes[result.id] == nil {
+            pendingSavePrompt = result
+            isSavePromptPresented = true
+        }
+    }
+    
+    func handleClusterSelection(_ cluster: RecordingInsightsCluster, displayResult: RecordingInsightsDisplayResult) {
+        insightsResult = nil
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+            clusterSaveContext = ClusterSaveContext(result: displayResult, cluster: cluster)
+        }
+    }
+    
+    func createNewInsightsNote(from result: RecordingInsightsDisplayResult) {
+        let newNote = TextNote(title: defaultInsightsNoteTitle(for: result), content: "")
+        modelContext.insert(newNote)
+        persistInsightsResult(result, into: newNote, replaceExistingContent: true)
+    }
+
+    func createNewClusterNote(from cluster: RecordingInsightsCluster, result: RecordingInsightsDisplayResult) {
+        let title = defaultClusterNoteTitle(for: cluster, timeframe: result.timeframeDescription)
+        let newNote = TextNote(title: title, content: "")
+        modelContext.insert(newNote)
+        persistCluster(
+            cluster,
+            from: result,
+            into: newNote,
+            replaceExistingContent: true
+        )
+    }
+
+    func saveEntireInsightsDirectly(for result: RecordingInsightsDisplayResult) {
+        insightsResult = nil
+        createNewInsightsNote(from: result)
+    }
+    
+    func persistInsightsResult(
+        _ result: RecordingInsightsDisplayResult,
+        into note: TextNote,
+        replaceExistingContent: Bool
+    ) {
+        guard !isPersistingInsights else { return }
+        isPersistingInsights = true
+        
+        let newContent = buildInsightsMarkdown(for: result)
+        let existingContent = note.content.trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        if replaceExistingContent || existingContent.isEmpty {
+            note.content = newContent
+        } else {
+            note.content = existingContent + "\n\n---\n\n" + newContent
+        }
+        
+        if note.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            note.title = defaultInsightsNoteTitle(for: result)
+        }
+        
+        let recordingIDs = allRecordingIDs(for: result)
+        recordingIDs.forEach { note.appendRecordingID($0) }
+        note.updatedAt = Date()
+        
+        do {
+            try modelContext.save()
+            savedInsightsNotes[result.id] = note
+            insightsAlert = InsightsAlertItem(
+                title: "保存成功",
+                message: "洞察已保存至“\(note.title)”。"
+            )
+            insightsNoteNavigationTarget = note
+        } catch {
+            insightsAlert = InsightsAlertItem(
+                title: "保存失败",
+                message: error.localizedDescription
+            )
+        }
+        
+        isPersistingInsights = false
+    }
+
+    func restoreInsightsDisplay(with result: RecordingInsightsDisplayResult) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            insightsResult = result
+        }
+    }
+    
+    func cancelClusterSaveFlow(for result: RecordingInsightsDisplayResult) {
+        clusterSaveContext = nil
+        restoreInsightsDisplay(with: result)
+    }
+
+    func persistCluster(
+        _ cluster: RecordingInsightsCluster,
+        from result: RecordingInsightsDisplayResult,
+        into note: TextNote,
+        replaceExistingContent: Bool
+    ) {
+        guard !isPersistingInsights else { return }
+        isPersistingInsights = true
+
+        let newContent = buildClusterMarkdown(for: cluster, in: result)
+        let existingContent = note.content.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if replaceExistingContent || existingContent.isEmpty {
+            note.content = newContent
+        } else {
+            note.content = existingContent + "\n\n---\n\n" + newContent
+        }
+
+        if note.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            note.title = defaultClusterNoteTitle(for: cluster, timeframe: result.timeframeDescription)
+        }
+
+        cluster.recordingIDs.forEach { note.appendRecordingID($0) }
+        note.updatedAt = Date()
+
+        do {
+            try modelContext.save()
+            let destinationTitle = note.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "无标题文档" : note.title
+            insightsAlert = InsightsAlertItem(
+                title: "已保存",
+                message: "“\(cluster.title)” 已保存至“\(destinationTitle)”。可在“文本编辑”查看。"
+            )
+            clusterSaveContext = nil
+            restoreInsightsDisplay(with: result)
+        } catch {
+            insightsAlert = InsightsAlertItem(
+                title: "保存失败",
+                message: error.localizedDescription
+            )
+        }
+
+        isPersistingInsights = false
+    }
+    
+    func buildInsightsMarkdown(for result: RecordingInsightsDisplayResult) -> String {
+        var sections: [String] = []
+        let title = defaultInsightsNoteTitle(for: result)
+        sections.append("# \(title)")
+        sections.append("生成于 \(TimestampFormatter.display(for: Date()))")
+        if let timeframe = result.timeframeDescription {
+            sections.append("覆盖范围：\(timeframe)")
+        }
+        sections.append("")
+        sections.append("## 叙述总结")
+        sections.append(result.narrative)
+        if let reflection = result.reflectionPrompt, !reflection.isEmpty {
+            sections.append("> 反思：\(reflection)")
+        }
+        
+        if !result.clusters.isEmpty {
+            sections.append("## 聚类洞察")
+            let lookup = recordingsDictionary()
+            for cluster in result.clusters {
+                sections.append("### \(cluster.title)")
+                sections.append(cluster.highlight)
+                if let detail = cluster.detail {
+                    sections.append(detail)
+                }
+                let recordingNames = cluster.recordingIDs.compactMap { id -> String? in
+                    guard let recording = lookup[id] else { return nil }
+                    return recordingLabel(for: recording)
+                }
+                if !recordingNames.isEmpty {
+                    sections.append("关联录音：\(recordingNames.joined(separator: "、"))")
+                }
+                sections.append("")
+            }
+        }
+        
+        if let extras = result.additionalInsights, !extras.isEmpty {
+            sections.append("## 补充观察")
+            extras.forEach { sections.append("- \($0)") }
+        }
+        
+        return sections.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    func buildClusterMarkdown(for cluster: RecordingInsightsCluster, in result: RecordingInsightsDisplayResult) -> String {
+        var segments: [String] = []
+        segments.append("## \(cluster.title)")
+        segments.append(cluster.highlight)
+        if let detail = cluster.detail {
+            segments.append(detail)
+        }
+        if let timeframe = result.timeframeDescription, !timeframe.isEmpty {
+            segments.append("_来自 \(timeframe) 的 AI 洞察_")
+        }
+        let lookup = recordingsDictionary()
+        let recordingNames = cluster.recordingIDs.compactMap { id -> String? in
+            guard let recording = lookup[id] else { return nil }
+            return recordingLabel(for: recording)
+        }
+        if !recordingNames.isEmpty {
+            segments.append("关联录音：\(recordingNames.joined(separator: "、"))")
+        }
+
+        return segments.joined(separator: "\n\n").trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+    
+    func defaultInsightsNoteTitle(for result: RecordingInsightsDisplayResult) -> String {
+        if let timeframe = result.timeframeDescription, !timeframe.isEmpty {
+            return "AI 洞察 - \(timeframe)"
+        }
+        return "AI 洞察 - \(TimestampFormatter.display(for: Date()))"
+    }
+
+    func defaultClusterNoteTitle(for cluster: RecordingInsightsCluster, timeframe: String?) -> String {
+        if let timeframe, !timeframe.isEmpty {
+            return "\(cluster.title) - \(timeframe)"
+        }
+        return "\(cluster.title) - \(TimestampFormatter.display(for: Date()))"
+    }
+    
+    func allRecordingIDs(for result: RecordingInsightsDisplayResult) -> [UUID] {
+        var unique: [UUID] = []
+        for id in result.clusters.flatMap(\.recordingIDs) where !unique.contains(id) {
+            unique.append(id)
+        }
+        return unique
+    }
+    
+    func recordingsDictionary() -> [UUID: Recording] {
+        Dictionary(uniqueKeysWithValues: recordings.map { ($0.id, $0) })
+    }
+    
+    func recordingLabel(for recording: Recording) -> String {
+        if let title = recording.title?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !title.isEmpty {
+            return title
+        }
+        return "\(TimestampFormatter.display(for: recording.timestamp)) · \(TimeFormatter.display(for: recording.duration))"
     }
     
     func applyQuickSelect(_ option: QuickSelectOption) {
@@ -600,6 +904,12 @@ private struct AddToNoteNavigationTarget: Identifiable, Hashable {
     static func == (lhs: AddToNoteNavigationTarget, rhs: AddToNoteNavigationTarget) -> Bool {
         lhs.note.id == rhs.note.id && lhs.recording.id == rhs.recording.id
     }
+}
+
+struct ClusterSaveContext: Identifiable {
+    let id = UUID()
+    let result: RecordingInsightsDisplayResult
+    let cluster: RecordingInsightsCluster
 }
 
 private struct RecordingListItem: View {
