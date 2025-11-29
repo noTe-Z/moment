@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8" />
+  <title>Moment · 文本编辑交互改版进展</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color:#111; background:#f7f7f9; padding:24px; }
+    h1 { margin-bottom:4px; }
+    section { background:#fff; border-radius:18px; box-shadow:0 12px 30px rgba(15,23,42,0.08); padding:20px 24px; margin-bottom:20px; }
+    .pill { display:inline-block; padding:4px 10px; border-radius:999px; font-size:13px; background:#eef2ff; color:#4338ca; margin-left:6px; }
+    ul { margin:0; padding-left:20px; }
+    li { margin-bottom:6px; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(220px,1fr)); gap:16px; }
+    .card { border-radius:16px; background:#f5f7ff; padding:16px; }
+    code { background:#f4f4f4; padding:2px 4px; border-radius:4px; }
+    .status { font-weight:600; }
+  </style>
+</head>
+<body>
+  <h1>文本编辑页 Action Dock 改版 <span class="pill">进行中</span></h1>
+
+  <section>
+    <h2>1. 变更内容</h2>
+    <div class="grid">
+      <div class="card">
+        <strong>Action Dock 布局（TextEditorView.swift:205-386）</strong>
+        <ul>
+          <li>移除底部 Toolbar，改为浮动胶囊 Dock，容纳录音、AI 按钮、关联录音入口。</li>
+          <li>AI tray 动画收纳“整理段落”“口播教练”卡片，视觉宽松且避免遮挡。</li>
+        </ul>
+      </div>
+      <div class="card">
+        <strong>RecorderControlButton 改造（TextEditorView.swift:984-1125）</strong>
+        <ul>
+          <li>新增 <code>.dock</code> 样式，缩小排版并保持录音/上传状态指示。</li>
+          <li>Prominent 样式继续服务其它页面，逻辑代码复用。</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>2. 与现有功能衔接</h2>
+    <ul>
+      <li>录音按钮仍调用 <code>handleRecorderButtonTapped → TextEditorRecorderViewModel</code>；只改变展示层。</li>
+      <li>AI Tray 两张卡分别复用 <code>handleRewriteButtonTapped</code>、<code>showNarrationCoach</code>，依旧触发原有 Rewrite sheet 与 Narration Coach sheet 流程。</li>
+      <li>关联录音圆形按钮保持与 <code>RecordingPreviewListPanel</code> 的联动，并在展开时自动折叠 AI tray，逻辑一致。</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>3. 端到端逻辑</h2>
+    <ol>
+      <li>进入 TextEditor → Safe Area 底部渲染 Action Dock。</li>
+      <li>用户：
+        <ul>
+          <li>点录音按钮 → 触发 Recorder VM，更新 Dock 内状态与转写流程。</li>
+          <li>点 AI Toggle → Dock 弹出 tray → 选择整理段落/口播教练 → 进入既有 AI 辅助流程。</li>
+          <li>点关联录音 → 折叠 tray → 展示 RecordingPreviewListPanel，进行播放/解绑/转写重试。</li>
+        </ul>
+      </li>
+    </ol>
+    <p>所有副作用（保存录音、调用 AI、展示 sheet）均沿用既有 entry→handler→sheet pipeline，改动仅在交互容器。</p>
+  </section>
+
+  <section>
+    <h2>4. 测试状态</h2>
+    <p class="status">❌ 未通过 — 运行受限</p>
+    <ul>
+      <li>命令：<code>cd Moment && xcodebuild -scheme Moment -destination 'platform=iOS Simulator,OS=17.0.1,name=iPhone 15' build</code></li>
+      <li>结果：失败，原因是沙箱无法连接 CoreSimulatorService（“Connection invalid”），因此暂无编译确认。</li>
+    </ul>
+    <p>需要在可访问 CoreSimulatorService 的环境重新运行以验证。</p>
+  </section>
+
+  <section>
+    <h2>5. 下一步</h2>
+    <ul>
+      <li>在正常模拟器服务环境 rerun <code>xcodebuild</code> 以确认编译通过。</li>
+      <li>上机体验 Dock + AI tray，重点检查键盘弹出时的手势与命中区域。</li>
+    </ul>
+  </section>
+</body>
+</html>

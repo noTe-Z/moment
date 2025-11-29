@@ -31,6 +31,7 @@ struct TextEditorView: View {
     @State private var transcriptViewerRecording: Recording?
     @State private var showNarrationCoach = false
     @State private var includeRecordingsInAIContext = true
+    @State private var showAIToolTray = false
     
     private let transcriptionManager = RecordingTranscriptionManager.shared
     
@@ -59,30 +60,33 @@ struct TextEditorView: View {
                 .gesture(dismissDragGesture)
         )
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            if showRecordingPanel, !associatedRecordings.isEmpty {
-                RecordingPreviewListPanel(
-                    recordings: associatedRecordings,
-                    highlightedRecordingID: highlightedRecordingID,
-                    currentlyPlayingID: playbackManager.currentlyPlayingID,
-                    playAction: { recording in
-                        highlightedRecordingID = recording.id
-                        playbackManager.toggle(recording: recording)
-                    },
-                    viewTranscriptAction: { recording in
-                        transcriptViewerRecording = recording
-                    },
-                    retryTranscriptionAction: { recording in
-                        transcriptionManager.retryTranscription(for: recording, in: modelContext)
-                    },
-                    unbindAction: { recording in
-                        unbindRecording(recording)
-                    },
-                    includeRecordingsInAIContext: $includeRecordingsInAIContext
-                )
-                .padding(.horizontal, 16)
-                .padding(.bottom, 12)
-                .transition(.move(edge: .bottom).combined(with: .opacity))
+            VStack(spacing: 12) {
+                if showRecordingPanel, !associatedRecordings.isEmpty {
+                    RecordingPreviewListPanel(
+                        recordings: associatedRecordings,
+                        highlightedRecordingID: highlightedRecordingID,
+                        currentlyPlayingID: playbackManager.currentlyPlayingID,
+                        playAction: { recording in
+                            highlightedRecordingID = recording.id
+                            playbackManager.toggle(recording: recording)
+                        },
+                        viewTranscriptAction: { recording in
+                            transcriptViewerRecording = recording
+                        },
+                        retryTranscriptionAction: { recording in
+                            transcriptionManager.retryTranscription(for: recording, in: modelContext)
+                        },
+                        unbindAction: { recording in
+                            unbindRecording(recording)
+                        },
+                        includeRecordingsInAIContext: $includeRecordingsInAIContext
+                    )
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+                actionDock
             }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 12)
         }
         .onAppear {
             loadAssociatedRecordingsIfNeeded()
@@ -105,6 +109,11 @@ struct TextEditorView: View {
         .onChange(of: recorderViewModel.pendingFallbackRecording) { snapshot in
             guard let snapshot else { return }
             persistFailedRecordingSnapshot(snapshot)
+        }
+        .onChange(of: showRecordingPanel) { isPresented in
+            if isPresented {
+                showAIToolTray = false
+            }
         }
         .alert("无法播放", isPresented: $showPlaybackError, actions: {
             Button("好的", role: .cancel) {
@@ -203,14 +212,6 @@ struct TextEditorView: View {
         ToolbarItem(placement: .topBarLeading) {
             leadingToolbarButton
         }
-        
-        ToolbarItemGroup(placement: .bottomBar) {
-            recorderToolbarButton
-            rewriteToolbarButton
-            narrationCoachToolbarButton
-            Spacer()
-            associatedRecordingToolbarButton
-        }
     }
     
     private var leadingToolbarButton: some View {
@@ -224,46 +225,100 @@ struct TextEditorView: View {
         }
     }
     
-    private var recorderToolbarButton: some View {
-        RecorderControlButton(
-            mode: recorderViewModel.mode,
-            elapsedText: recorderViewModel.elapsedDisplay,
-            statusText: recorderViewModel.statusMessage,
-            action: handleRecorderButtonTapped
-        )
+    private var actionDock: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if showAIToolTray {
+                aiToolTray
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+            HStack(spacing: 12) {
+                recorderToolbarButton
+                aiMenuToggleButton
+                associatedRecordingDockButton
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(.thinMaterial)
+            )
+            .shadow(color: Color.black.opacity(0.05), radius: 14, x: 0, y: 8)
+        }
     }
     
-    private var rewriteToolbarButton: some View {
+    private var aiToolTray: some View {
+        HStack(spacing: 12) {
+            rewriteAIToolButton
+            narrationCoachToolButton
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity)
+        .background(
+            RoundedRectangle(cornerRadius: 26, style: .continuous)
+                .fill(Color(UIColor.systemBackground))
+        )
+        .shadow(color: Color.black.opacity(0.05), radius: 12, x: 0, y: 6)
+    }
+    
+    private var aiMenuToggleButton: some View {
+        Button {
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+                showAIToolTray.toggle()
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "wand.and.stars")
+                    .font(.system(size: 18, weight: .semibold))
+                Text("AI")
+                    .font(.subheadline.weight(.semibold))
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(
+                        showAIToolTray
+                        ? Color.accentColor.opacity(0.15)
+                        : Color(UIColor.secondarySystemBackground)
+                    )
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("展开 AI 工具")
+    }
+    
+    private var rewriteAIToolButton: some View {
         let isDisabled = isRewriting || content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         
         return Button {
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+                showAIToolTray = false
+            }
             handleRewriteButtonTapped()
         } label: {
-            HStack(alignment: .center, spacing: 12) {
-                if isRewriting {
-                    ProgressView()
-                        .progressViewStyle(.circular)
-                        .tint(Color.accentColor)
-                } else {
-                    Image(systemName: "wand.and.stars")
-                        .font(.system(size: 22, weight: .semibold))
-                }
-                
-                VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    if isRewriting {
+                        ProgressView()
+                            .progressViewStyle(.circular)
+                            .tint(Color.accentColor)
+                    } else {
+                        Image(systemName: "text.alignleft")
+                            .font(.system(size: 20, weight: .semibold))
+                    }
                     Text("整理段落")
-                        .font(.headline)
+                        .font(.subheadline)
                         .fontWeight(.semibold)
-                    Text("AI 辅助")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
                 }
+                Text("AI 辅助润色当前内容")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 18)
-            .padding(.vertical, 12)
+            .padding(12)
             .background(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(isDisabled ? Color(UIColor.secondarySystemBackground) : Color.accentColor.opacity(0.15))
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(isDisabled ? Color(UIColor.secondarySystemBackground) : Color.accentColor.opacity(0.12))
             )
             .foregroundStyle(isDisabled ? Color.secondary : Color.primary)
         }
@@ -272,28 +327,30 @@ struct TextEditorView: View {
         .accessibilityLabel("使用 AI 整理当前内容")
     }
     
-    private var narrationCoachToolbarButton: some View {
+    private var narrationCoachToolButton: some View {
         Button {
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+                showAIToolTray = false
+            }
             showNarrationCoach = true
         } label: {
-            HStack(alignment: .center, spacing: 12) {
-                Image(systemName: "bubble.left.and.waveform.fill")
-                    .font(.system(size: 22, weight: .semibold))
-                    .foregroundStyle(Color.accentColor)
-                VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    Image(systemName: "bubble.left.and.waveform.fill")
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundStyle(Color.accentColor)
                     Text("口播教练")
-                        .font(.headline)
+                        .font(.subheadline)
                         .fontWeight(.semibold)
-                    Text("GPT Realtime")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
                 }
+                Text("GPT Realtime 练习")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 18)
-            .padding(.vertical, 12)
+            .padding(12)
             .background(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
                     .fill(Color(UIColor.secondarySystemBackground))
             )
         }
@@ -301,11 +358,23 @@ struct TextEditorView: View {
         .accessibilityLabel("打开口播练习教练")
     }
     
+    private var recorderToolbarButton: some View {
+        RecorderControlButton(
+            mode: recorderViewModel.mode,
+            elapsedText: recorderViewModel.elapsedDisplay,
+            statusText: recorderViewModel.statusMessage,
+            style: .dock,
+            action: handleRecorderButtonTapped
+        )
+    }
+    
     @ViewBuilder
-    private var associatedRecordingToolbarButton: some View {
+    private var associatedRecordingDockButton: some View {
         if !associatedRecordings.isEmpty {
+            Spacer(minLength: 0)
             Button {
                 withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                    showAIToolTray = false
                     showRecordingPanel.toggle()
                 }
             } label: {
@@ -913,9 +982,15 @@ private struct RecordingPreviewRow: View {
 }
 
 private struct RecorderControlButton: View {
+    enum Style {
+        case prominent
+        case dock
+    }
+    
     let mode: TextEditorRecorderViewModel.Mode
     let elapsedText: String
     let statusText: String?
+    let style: Style
     let action: () -> Void
     
     private var isRecording: Bool {
@@ -926,8 +1001,28 @@ private struct RecorderControlButton: View {
         mode == .uploading || mode == .transcribing
     }
     
+    private var horizontalPadding: CGFloat {
+        style == .prominent ? 18 : 14
+    }
+    
+    private var verticalPadding: CGFloat {
+        style == .prominent ? 12 : 10
+    }
+    
+    private var cornerRadius: CGFloat {
+        style == .prominent ? 16 : 22
+    }
+    
+    private var titleFont: Font {
+        style == .prominent ? .headline : .subheadline.weight(.semibold)
+    }
+    
+    private var subtitleFont: Font {
+        style == .prominent ? .caption : .caption2
+    }
+    
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: style == .prominent ? 6 : 2) {
             Button(action: action) {
                 HStack(alignment: .center, spacing: 12) {
                     if isProcessing {
@@ -940,33 +1035,34 @@ private struct RecorderControlButton: View {
                             .symbolRenderingMode(.monochrome)
                     }
                     
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: style == .prominent ? 2 : 1) {
                         Text(buttonTitle)
-                            .font(.headline)
-                            .fontWeight(.semibold)
-                        if isRecording {
-                            Text(elapsedText)
-                                .font(.caption)
-                                .monospacedDigit()
-                                .foregroundStyle(Color.white.opacity(0.85))
-                        } else if let statusText, !statusText.isEmpty, !isProcessing {
-                            Text(statusText)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                            .font(titleFont)
+                        if let subtitle = subtitleText {
+                            if isRecording {
+                                Text(subtitle)
+                                    .font(subtitleFont)
+                                    .monospacedDigit()
+                                    .foregroundStyle(subtitleColor)
+                            } else {
+                                Text(subtitle)
+                                    .font(subtitleFont)
+                                    .foregroundStyle(subtitleColor)
+                            }
                         }
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 18)
-                .padding(.vertical, 12)
+                .padding(.horizontal, horizontalPadding)
+                .padding(.vertical, verticalPadding)
                 .background(background)
                 .foregroundStyle(foregroundStyle)
-                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
             }
             .buttonStyle(.plain)
             .disabled(isProcessing)
             
-            if isProcessing, let statusText {
+            if style == .prominent, isProcessing, let statusText {
                 Text(statusText)
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -987,6 +1083,20 @@ private struct RecorderControlButton: View {
         }
     }
     
+    private var subtitleText: String? {
+        if isRecording {
+            return elapsedText
+        }
+        if isProcessing {
+            return statusText
+        }
+        return statusText
+    }
+    
+    private var subtitleColor: Color {
+        isRecording ? Color.white.opacity(0.9) : .secondary
+    }
+    
     @ViewBuilder
     private var background: some View {
         if isRecording {
@@ -999,10 +1109,13 @@ private struct RecorderControlButton: View {
                 endPoint: .bottomTrailing
             )
         } else if isProcessing {
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(Color.accentColor.opacity(0.15))
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .fill(Color.accentColor.opacity(style == .prominent ? 0.15 : 0.2))
+        } else if style == .dock {
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .fill(Color(UIColor.systemBackground).opacity(0.9))
         } else {
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                 .fill(Color(UIColor.secondarySystemBackground))
         }
     }
@@ -1126,4 +1239,3 @@ private struct RewritePreviewSheet: View {
         )
     }
 }
-

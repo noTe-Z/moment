@@ -1,3 +1,7 @@
+---
+alwaysApply: true
+---
+
 # Instructions
 
 During your interaction with the user, if you find anything reusable in this project (e.g. version of a library, model name), especially about a fix to a mistake you made or a correction you received, you should take note in the `Lessons` section in the `custom-rules.mdc` file so you will not make the same mistake again. 
@@ -15,3 +19,35 @@ During your interaction with the user, if you find anything reusable in this pro
 - `navigationDestination(item:)` requires the bound item type to conform to `Hashable`, even if it already conforms to `Identifiable`.
 - Narration Coach integrations must target the `gpt-realtime-mini-2025-10-06` model unless the user requests another.
 - Before shipping realtime-related changes, run a standalone API connectivity test (outside the app) to confirm the specified model responds successfully, using the provided API key.
+
+# 🟢 Post-Implementation Summary Protocol: Progress Reports (CRITICAL)
+
+After you finish a non-trivial implementation + test cycle (i.e., new features, significant refactoring, or logic changes), **always** generate a structured progress report in HTML. 
+
+**Core Principle:** Act as a "Technical Co-founder" briefing a Product Manager. Do not just list code changes. Instead, visualize how the new changes fit into the existing system architecture.
+
+To maintain alignment between the codebase and the product vision, you must adhere to the following reporting protocol:
+
+1.  **Trigger:** Upon completing any implementation task (coding + testing), BEFORE asking the user "what's next?", you must output a **Progress Explanation**.
+2. **Action:** Generate/Overwrite `docs/latest_report.html`.
+3. **Persona:** Speak as a Product-Minded Architect. Focus on "How this changes the system" rather than just "Lines of code changed."
+
+**Documentation Principles (DO NOT JUST FILL BLANKS):**
+1.  **Dynamic Structure:** You are free to design the HTML layout, but it must be clean, modern, and readable.
+2.  **Connection over Description:** Don't just say "I added function X". Explain "Function X hooks into Module Y to solve Z".
+3.  **Visual Thinking:** Always use ASCII art or Mermaid diagrams inside the HTML to show data flows.
+
+**Required Content Sections (Adapt as needed):**
+1.  **🦅 The Bird's Eye View:** - Where does this feature live physically in the app? 
+    - What is the ONE key connection point to the old system?
+2.  **🧩 Architecture & State:** - List *specific* modified files and state variables (e.g., `selectedRecordingIDs`).
+    - Explain *why* you chose this data structure.
+3.  **⚗️ The Flow (Crucial):** - A visual representation (Diagram) from User Action -> Internal Logic -> Result.
+    - Highlight decision nodes (e.g., "If transcript is nil, skip AI").
+4.  **🕹 Usage:** - Concrete scenarios: "Click X, expect Y."
+
+**Constraint:** - If a section is irrelevant (e.g., no UI changes), SKIP IT. Do not force generic text.
+- If a critical detail doesn't fit these sections, create a NEW section for it.
+
+
+**Why this matters:** The user relies on this summary to maintain a mental map of the project. If you skip details about how new State connects to old Views, the user loses context.
