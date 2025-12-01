@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Coach Interaction Refresh</title>
+  <style>
+    body { font-family: "SF Pro Text", "Helvetica Neue", Arial, sans-serif; margin: 24px; line-height: 1.6; color: #111; }
+    h1 { font-size: 26px; margin-bottom: 8px; }
+    h2 { margin-top: 28px; font-size: 18px; }
+    code { background: #f4f4f4; padding: 2px 4px; border-radius: 4px; }
+    pre { background: #f9fafb; padding: 12px; border-radius: 10px; overflow-x: auto; }
+    .pill { display: inline-block; padding: 4px 10px; border-radius: 20px; background: #e8f1ff; color: #1f4b99; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <h1>Coach Interaction Refresh <span class="pill">AI Assisted Narration</span></h1>
+
+  <h2>🦅 Bird's Eye View</h2>
+  <p>The realtime logic still lives in <code>Moment/Moment/OpenAIRealtimeCoachService.swift</code>, but the prompt builder now injects an explicit “bridge back to the note” directive so every question ties the last spoken sentence to the note snapshot. On the presentation layer, <code>Moment/Moment/NarrationCoachView.swift</code> mirrors the reference mock (prompt card + CTA, summary chip at the end), while <code>Moment/Moment/LiveSpeechRecognizer.swift</code> now restarts recognition after every pause so the UI always gets a fresh transcript and follow-up question.</p>
+
+  <h2>🧩 Architecture & State</h2>
+  <ul>
+    <li><strong>Prompt Strategy:</strong> The warmup/follow-up instructions stress: “quote the user’s latest keywords, then point to the next unresolved note bullet.” This guarantees continuity even when the narration stalls.</li>
+    <li><strong>Continuous Listening:</strong> The speech recognizer keeps the audio engine running and respawns <code>SFSpeechRecognitionTask</code> after each final result, so every natural pause funnels into <code>fetchFollowUpPrompt()</code> without the user restarting.</li>
+    <li><strong>UI State:</strong> The view now binds only to <code>currentPrompt</code>, <code>state</code>, and <code>summaryText</code>. Transcript rows were removed, reducing noise and highlighting the guidance card.</li>
+    <li><strong>Control Loop:</strong> The circular mic button still toggles <code>viewModel.toggleSession()</code>; the rest of the scaffolding (alerts, copy toast) remains intact but visually secondary.</li>
+  </ul>
+
+  <h2>⚗️ The Flow</h2>
+  <pre>
+User taps “开始练习”
+        |
+        v
+NarrationCoachViewModel
+  - starts speech recognizer
+  - streams transcript chunks
+        |
+        v
+OpenAIRealtimeCoachService
+  - session.update with note snapshot & language
+  - response.create per warmup/follow-up with bridging directive
+        |
+        v
+LiveSpeechRecognizer
+  - streams partial text continuously
+  - each final chunk triggers next prompt request
+        |
+        v
+OpenAI Realtime (gpt-realtime-mini-2025-10-06)
+  - emits response.text.delta ... response.done
+        |
+        v
+Prompt card updates inline, summary card appears after “结束练习”
+  </pre>
+
+  <h2>🕹 Usage</h2>
+  <ul>
+    <li>Tap “开始练习”：the card immediately streams the first bridging hint that references the note.</li>
+    <li>Whenever you pause, the next question reuses your last words to pull in the next note bullet so you never lose context.</li>
+    <li>Tap “结束练习”：the coach summarizes the full narration and the summary card is revealed with a copy action.</li>
+  </ul>
+</body>
+</html>

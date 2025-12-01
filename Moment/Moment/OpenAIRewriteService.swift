@@ -25,7 +25,7 @@ struct OpenAIRewriteService {
     
     private enum Constants {
         static let endpoint = URL(string: "https://api.openai.com/v1/chat/completions")!
-        static let model = "gpt-5-mini"
+        static let model = "gpt-4o-mini"
     }
     
     func rewrite(text: String) async throws -> String {

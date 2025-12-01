@@ -33,6 +33,7 @@ final class LiveSpeechRecognizer: NSObject {
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
     private var speechRecognizer: SFSpeechRecognizer?
+    private var shouldMaintainSession = false
     
     init(localeIdentifier: String) {
         self.localeIdentifier = localeIdentifier
@@ -48,9 +49,7 @@ final class LiveSpeechRecognizer: NSObject {
         
         try await ensurePermissions()
         try configureAudioSession()
-        
-        recognitionRequest = SFSpeechAudioBufferRecognitionRequest()
-        recognitionRequest?.shouldReportPartialResults = true
+        shouldMaintainSession = true
         
         let inputNode = audioEngine.inputNode
         let recordingFormat = inputNode.outputFormat(forBus: 0)
@@ -66,26 +65,11 @@ final class LiveSpeechRecognizer: NSObject {
             throw RecognizerError.audioSessionFailed("音频引擎启动失败：\(error.localizedDescription)")
         }
         
-        recognitionTask = speechRecognizer.recognitionTask(with: recognitionRequest!) { [weak self] result, error in
-            guard let self else { return }
-            if let result {
-                let text = result.bestTranscription.formattedString
-                DispatchQueue.main.async {
-                    self.onTranscription?(text, result.isFinal)
-                }
-                if result.isFinal {
-                    self.recognitionRequest?.endAudio()
-                }
-            } else if let error {
-                self.stop()
-                DispatchQueue.main.async {
-                    self.onError?(RecognizerError.recognitionFailed(error.localizedDescription))
-                }
-            }
-        }
+        startRecognitionTask()
     }
     
     func stop() {
+        shouldMaintainSession = false
         recognitionTask?.cancel()
         recognitionTask = nil
         
@@ -175,6 +159,40 @@ final class LiveSpeechRecognizer: NSObject {
             throw RecognizerError.audioSessionFailed("无法配置音频会话：\(error.localizedDescription)")
         }
     }
+    
+    private func startRecognitionTask() {
+        recognitionTask?.cancel()
+        recognitionTask = nil
+        
+        recognitionRequest = SFSpeechAudioBufferRecognitionRequest()
+        recognitionRequest?.shouldReportPartialResults = true
+        
+        guard let speechRecognizer, let recognitionRequest else { return }
+        
+        recognitionTask = speechRecognizer.recognitionTask(with: recognitionRequest) { [weak self] result, error in
+            guard let self else { return }
+            if let result {
+                let text = result.bestTranscription.formattedString
+                DispatchQueue.main.async {
+                    self.onTranscription?(text, result.isFinal)
+                }
+                if result.isFinal {
+                    self.handleFinalResult()
+                }
+            } else if let error {
+                self.stop()
+                DispatchQueue.main.async {
+                    self.onError?(RecognizerError.recognitionFailed(error.localizedDescription))
+                }
+            }
+        }
+    }
+    
+    private func handleFinalResult() {
+        guard shouldMaintainSession else { return }
+        recognitionTask = nil
+        recognitionRequest = nil
+        startRecognitionTask()
+    }
 }
-
 

@@ -19,6 +19,7 @@ During your interaction with the user, if you find anything reusable in this pro
 - `navigationDestination(item:)` requires the bound item type to conform to `Hashable`, even if it already conforms to `Identifiable`.
 - Narration Coach integrations must target the `gpt-realtime-mini-2025-10-06` model unless the user requests another.
 - Before shipping realtime-related changes, run a standalone API connectivity test (outside the app) to confirm the specified model responds successfully, using the provided API key.
+- OpenAI realtime expects JSON frames as text (not binary); streaming events now arrive as `response.text.delta` with completion on `response.done` (or `response.text.done`), so handle those variants.
 
 # 🟢 Post-Implementation Summary Protocol: Progress Reports (CRITICAL)
 

@@ -205,7 +205,10 @@ final class OpenAIRealtimeCoachService {
     
     private func send(json: [String: Any], using task: URLSessionWebSocketTask) async throws {
         let data = try JSONSerialization.data(withJSONObject: json)
-        try await task.send(.data(data))
+        guard let text = String(data: data, encoding: .utf8) else {
+            throw ServiceError.invalidResponse("无法序列化实时请求。")
+        }
+        try await task.send(.string(text))
     }
     
     private func listenForMessages() {
@@ -253,7 +256,7 @@ final class OpenAIRealtimeCoachService {
                 sessionUpdateContinuation = nil
                 continuation.resume(returning: ())
             }
-        case "response.output_text.delta":
+        case "response.output_text.delta", "response.text.delta":
             guard let delta = json["delta"] as? String else { return }
             responseBuffer.append(delta)
             if pendingPurpose == .prompt {
@@ -262,7 +265,11 @@ final class OpenAIRealtimeCoachService {
                     self.onPromptStreamingUpdate?(self.responseBuffer.trimmingCharacters(in: .whitespacesAndNewlines))
                 }
             }
-        case "response.completed":
+        case "response.output_text.done", "response.text.done":
+            if let finalText = json["text"] as? String {
+                responseBuffer = finalText
+            }
+        case "response.done", "response.completed":
             finishPendingResponse(errorMessage: nil)
         case "error":
             let errorMessage: String
@@ -329,8 +336,14 @@ final class OpenAIRealtimeCoachService {
         case .warmup:
             modeHint = "以欢迎式开场，帮助我进入状态，可以从最核心的主线或第一段开始提问。"
         case .followUp:
-            modeHint = "根据最新的讲述补充更深入的追问，或提示我尚未覆盖的笔记重点。"
+            modeHint = "你的问题必须从我刚才的讲述自然衔接到笔记里的下一个重点，或提示我补充真实细节。"
         }
+        
+        let bridgingDirective = """
+        重点：根据「最新一句」的语义，先肯定我刚才的讲述，再指出笔记中最相关或尚未提及的要点，并用一个问题/提示引导我继续复述。
+        - 如果我已经覆盖该要点，转向下一个关键点或追问更细节的体验。
+        - 每次都引用我刚说的关键词，让衔接听起来自然顺畅。
+        """
         
         return """
         \(languageDirective)
@@ -341,8 +354,9 @@ final class OpenAIRealtimeCoachService {
         最新一句：
         \(latest)
         
+        \(bridgingDirective)
         \(modeHint)
-        仅输出 1-2 句提示或问题，语气温暖而具体，帮助我继续讲下去。
+        请仅输出 1-2 句提示或问题，语气温暖而具体，帮助我继续讲下去。
         """
     }
     

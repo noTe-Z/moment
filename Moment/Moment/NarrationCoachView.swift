@@ -6,14 +6,14 @@ struct NarrationCoachView: View {
     
     var body: some View {
         NavigationStack {
-            VStack(spacing: 24) {
+            VStack(spacing: 28) {
                 promptCard
-                transcriptSection
                 summarySection
                 Spacer(minLength: 12)
                 controlButton
             }
-            .padding(20)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 24)
             .navigationTitle("口播教练")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -64,63 +64,6 @@ struct NarrationCoachView: View {
             RoundedRectangle(cornerRadius: 24, style: .continuous)
                 .fill(Color(UIColor.secondarySystemBackground))
         )
-    }
-    
-    private var transcriptSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("口播记录")
-                    .font(.headline)
-                Spacer()
-                if viewModel.isRecording {
-                    Text("实时识别中…")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            
-            let entries = Array(viewModel.transcriptEntries.suffix(4))
-            ForEach(entries) { entry in
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(entry.text)
-                        .font(.body)
-                        .foregroundStyle(.primary)
-                    Text(entry.timestamp.formatted(date: .omitted, time: .shortened))
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(12)
-                .background(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .fill(Color(UIColor.systemBackground))
-                        .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
-                )
-            }
-            
-            if !viewModel.transcriptPreview.isEmpty {
-                HStack(spacing: 8) {
-                    ProgressView()
-                        .progressViewStyle(.circular)
-                    Text(viewModel.transcriptPreview)
-                        .font(.body)
-                        .foregroundStyle(.secondary)
-                }
-                .padding(.vertical, 4)
-            }
-            
-            if entries.isEmpty && viewModel.transcriptPreview.isEmpty {
-                Text("每次暂停讲话都会自动生成一条文本，便于回顾。")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(16)
-                    .background(
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .fill(Color(UIColor.systemBackground))
-                    )
-            }
-        }
     }
     
     @ViewBuilder
@@ -215,5 +158,4 @@ struct NarrationCoachView: View {
         }
     }
 }
-
 
