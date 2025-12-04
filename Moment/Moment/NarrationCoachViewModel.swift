@@ -42,6 +42,9 @@ final class NarrationCoachViewModel: ObservableObject {
     private let languageHint: LanguageHint
     private let service: OpenAIRealtimeCoachService
     private let speechRecognizer: LiveSpeechRecognizer
+    private var silenceMonitorTask: Task<Void, Never>?
+    private var lastSpeechTimestamp: Date?
+    private var didIssuePromptForCurrentPause = false
     
     init(noteTitle: String, noteContent: String, onSummaryGenerated: ((String) -> Void)? = nil) {
         let snapshot = Self.composeSnapshot(title: noteTitle, content: noteContent)
@@ -94,6 +97,7 @@ final class NarrationCoachViewModel: ObservableObject {
                 try await service.connectIfNeeded()
                 try await speechRecognizer.start()
                 isRecording = true
+                startSilenceMonitor()
                 try await fetchWarmupPrompt()
             } catch {
                 handleError(error)
@@ -105,6 +109,7 @@ final class NarrationCoachViewModel: ObservableObject {
         guard isRecording else { return }
         isRecording = false
         speechRecognizer.stop()
+        stopSilenceMonitor()
         state = .summarizing
         currentPrompt = "正在整理本次练习…"
         
@@ -123,6 +128,7 @@ final class NarrationCoachViewModel: ObservableObject {
     
     func tearDown() {
         speechRecognizer.stop()
+        stopSilenceMonitor()
         service.closeConnection()
     }
     
@@ -169,37 +175,86 @@ final class NarrationCoachViewModel: ObservableObject {
     private func handleTranscription(text: String, isFinal: Bool) {
         guard isRecording else { return }
         transcriptPreview = text
+        lastSpeechTimestamp = Date()
+        didIssuePromptForCurrentPause = false
         
         if isFinal {
             let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
             transcriptPreview = ""
             guard !trimmed.isEmpty else { return }
             transcriptEntries.append(TranscriptEntry(text: trimmed, timestamp: Date()))
+            didIssuePromptForCurrentPause = false
             Task {
                 await self.fetchFollowUpPrompt(for: trimmed)
             }
         }
     }
     
-    private func fetchFollowUpPrompt(for latest: String) async {
+    private func fetchFollowUpPrompt(for latest: String, shouldResetSilenceThrottle: Bool = true) async {
         guard isRecording else { return }
+        let trimmedLatest = latest.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedLatest.isEmpty else { return }
         state = .awaitingPrompt
         do {
             let prompt = try await service.requestPrompt(
                 kind: .followUp,
                 sessionHistory: transcriptEntries.map(\.text),
-                latestUtterance: latest
+                latestUtterance: trimmedLatest
             )
             promptHistory.append(PromptEntry(text: prompt, timestamp: Date()))
             currentPrompt = prompt
             state = .listening
+            if shouldResetSilenceThrottle {
+                didIssuePromptForCurrentPause = false
+            }
         } catch {
             handleError(error)
         }
     }
     
+    private func startSilenceMonitor() {
+        silenceMonitorTask?.cancel()
+        silenceMonitorTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 600_000_000)
+                await MainActor.run {
+                    guard let self else { return }
+                    self.evaluateSilenceIfNeeded()
+                }
+            }
+        }
+    }
+    
+    private func stopSilenceMonitor() {
+        silenceMonitorTask?.cancel()
+        silenceMonitorTask = nil
+        lastSpeechTimestamp = nil
+        didIssuePromptForCurrentPause = false
+    }
+    
+    private func evaluateSilenceIfNeeded() {
+        guard isRecording,
+              state == .listening,
+              didIssuePromptForCurrentPause == false,
+              let lastSpeechTimestamp
+        else { return }
+        
+        let silenceDuration = Date().timeIntervalSince(lastSpeechTimestamp)
+        guard silenceDuration >= 1.8 else { return }
+        
+        guard let latest = transcriptPreview.nonEmpty ?? transcriptEntries.last?.text else {
+            return
+        }
+        
+        didIssuePromptForCurrentPause = true
+        Task {
+            await self.fetchFollowUpPrompt(for: latest, shouldResetSilenceThrottle: false)
+        }
+    }
+    
     private func handleError(_ error: Error) {
         speechRecognizer.stop()
+        stopSilenceMonitor()
         isRecording = false
         state = .failed(error.localizedDescription)
         errorMessage = error.localizedDescription
@@ -252,6 +307,9 @@ private extension String {
     var containsChineseCharacters: Bool {
         range(of: #"\p{Han}"#, options: .regularExpression) != nil
     }
+    
+    var nonEmpty: String? {
+        let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
 }
-
-

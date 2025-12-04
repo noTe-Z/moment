@@ -16,12 +16,13 @@
   <h1>Coach Interaction Refresh <span class="pill">AI Assisted Narration</span></h1>
 
   <h2>🦅 Bird's Eye View</h2>
-  <p>The realtime logic still lives in <code>Moment/Moment/OpenAIRealtimeCoachService.swift</code>, but the prompt builder now injects an explicit “bridge back to the note” directive so every question ties the last spoken sentence to the note snapshot. On the presentation layer, <code>Moment/Moment/NarrationCoachView.swift</code> mirrors the reference mock (prompt card + CTA, summary chip at the end), while <code>Moment/Moment/LiveSpeechRecognizer.swift</code> now restarts recognition after every pause so the UI always gets a fresh transcript and follow-up question.</p>
+  <p>The realtime logic still lives in <code>Moment/Moment/OpenAIRealtimeCoachService.swift</code>, but the prompt builder now injects an explicit “bridge back to the note” directive so every question ties the last spoken sentence to the note snapshot. On the presentation layer, <code>Moment/Moment/NarrationCoachView.swift</code> mirrors the reference mock (prompt card + CTA, summary chip at the end), while <code>Moment/Moment/LiveSpeechRecognizer.swift</code> + <code>NarrationCoachViewModel</code> collaborate so that each 1–2s pause immediately triggers a new guiding question.</p>
 
   <h2>🧩 Architecture & State</h2>
   <ul>
     <li><strong>Prompt Strategy:</strong> The warmup/follow-up instructions stress: “quote the user’s latest keywords, then point to the next unresolved note bullet.” This guarantees continuity even when the narration stalls.</li>
-    <li><strong>Continuous Listening:</strong> The speech recognizer keeps the audio engine running and respawns <code>SFSpeechRecognitionTask</code> after each final result, so every natural pause funnels into <code>fetchFollowUpPrompt()</code> without the user restarting.</li>
+    <li><strong>Continuous Listening:</strong> The speech recognizer keeps the audio engine running and respawns <code>SFSpeechRecognitionTask</code> after each final result, feeding a silence monitor in the view model.</li>
+    <li><strong>Silence Monitor:</strong> <code>NarrationCoachViewModel</code> tracks the last utterance timestamp; if the user stays quiet for ≥1.8s, it sends the most recent partial/final sentence to the realtime service to get the next bridging prompt.</li>
     <li><strong>UI State:</strong> The view now binds only to <code>currentPrompt</code>, <code>state</code>, and <code>summaryText</code>. Transcript rows were removed, reducing noise and highlighting the guidance card.</li>
     <li><strong>Control Loop:</strong> The circular mic button still toggles <code>viewModel.toggleSession()</code>; the rest of the scaffolding (alerts, copy toast) remains intact but visually secondary.</li>
   </ul>
@@ -43,7 +44,7 @@ OpenAIRealtimeCoachService
         v
 LiveSpeechRecognizer
   - streams partial text continuously
-  - each final chunk triggers next prompt request
+  - view model silence monitor waits ~1.8s, then calls follow-up prompt with latest speech
         |
         v
 OpenAI Realtime (gpt-realtime-mini-2025-10-06)
@@ -59,5 +60,9 @@ Prompt card updates inline, summary card appears after “结束练习”
     <li>Whenever you pause, the next question reuses your last words to pull in the next note bullet so you never lose context.</li>
     <li>Tap “结束练习”：the coach summarizes the full narration and the summary card is revealed with a copy action.</li>
   </ul>
+
+  <h2>🛠️ Realtime API Fix Retrospective</h2>
+  <p>Earlier we kept seeing the “The server had an error while processing your request” dialog because our websocket payloads were being sent as binary frames (<code>.data</code>) while the OpenAI realtime endpoint expects UTF‑8 text frames. The server accepted the handshake but failed every <code>session.update</code>/<code>response.create</code>, which surfaced as a generic server error in the UI.</p>
+  <p>The fix lives in <code>OpenAIRealtimeCoachService.send(json:using:)</code>: we now serialize JSON to text and send via <code>.string</code>, plus we normalized event handling to the new <code>response.text.delta/response.done</code> schema. After that change, the standalone probe (documented in <code>custom-rules.mdc</code>) consistently receives streamed deltas, and the app no longer surfaces the previous error alert.</p>
 </body>
 </html>
